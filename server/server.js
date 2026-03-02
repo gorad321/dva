@@ -14,6 +14,7 @@ const { initDatabase } = require('./src/db/database');
 const authRoutes = require('./src/routes/auth');
 const productsRoutes = require('./src/routes/products');
 const categoriesRoutes = require('./src/routes/categories');
+const brandsRoutes = require('./src/routes/brands');
 const cartRoutes = require('./src/routes/cart');
 const ordersRoutes = require('./src/routes/orders');
 const accountRoutes = require('./src/routes/account');
@@ -21,8 +22,10 @@ const reviewsRoutes = require('./src/routes/reviews');
 const promotionsRoutes = require('./src/routes/promotions');
 const adminRoutes = require('./src/routes/admin');
 const vehicleRoutes = require('./src/routes/vehicle');
+const paymentsRoutes = require('./src/routes/payments');
 const errorHandler = require('./src/middleware/errorHandler');
 
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -44,22 +47,27 @@ app.use(
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const allowedOrigins = [process.env.CLIENT_ORIGIN || 'http://localhost:5173'];
+const isDev = process.env.NODE_ENV !== 'production';
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Autoriser les requêtes sans origin (ex: Postman, mobile apps)
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Origine non autorisée par CORS'));
-      }
+      if (!origin) return callback(null, true);
+      // En développement : autoriser tous les ports localhost (5173, 5174, 3000, etc.)
+      if (isDev && /^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+      // En production : uniquement l'origine configurée
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error('Origine non autorisée par CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// ─── Fichiers statiques (uploads) ─────────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // ─── Parsers ──────────────────────────────────────────────────────────────────
 app.use(cookieParser());
@@ -136,6 +144,7 @@ app.use('/api/promotions/validate', promoLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productsRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/brands', brandsRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/account', accountRoutes);
@@ -143,11 +152,71 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/promotions', promotionsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/vehicle', vehicleRoutes);
+app.use('/api/payments', paymentsRoutes);
+
+// Route publique hero slides
+app.get('/api/settings/hero', (_req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'hero_slides'").get();
+    res.json({ slides: row ? JSON.parse(row.value) : [] });
+  } catch (err) { next(err); }
+});
+
+// Routes publiques pages informations
+app.get('/api/pages', (_req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const db = getDb();
+    const pages = db.prepare('SELECT id, slug, title, updated_at FROM pages ORDER BY id ASC').all();
+    res.json({ pages });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/pages/:slug', (req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const db = getDb();
+    const page = db.prepare('SELECT * FROM pages WHERE slug = ?').get(req.params.slug);
+    if (!page) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Page introuvable' } });
+    res.json({ page });
+  } catch (err) { next(err); }
+});
+
+// Route publique paiement settings
+app.get('/api/settings/payment', (_req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'payment_settings'").get();
+    const defaults = { wave_number: '', orange_money_number: '' };
+    res.json({ payment: row ? { ...defaults, ...JSON.parse(row.value) } : defaults });
+  } catch (err) { next(err); }
+});
+
+// Route publique footer settings
+app.get('/api/settings/footer', (_req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'footer'").get();
+    res.json({ footer: row ? JSON.parse(row.value) : {} });
+  } catch (err) { next(err); }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
 });
+
+// ─── Frontend React (production uniquement) ───────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+  });
+}
 
 // ─── Gestionnaire d'erreurs global (doit être en dernier) ────────────────────
 app.use(errorHandler);

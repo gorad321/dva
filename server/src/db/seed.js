@@ -769,7 +769,72 @@ function seedDatabase(db) {
   insertPromo.run('FREINS13000', '13 000 F CFA de réduction sur les freins', 'fixed', 13000, 50000, 200,
     new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(), 'all');
 
-  console.log(`✅ Seed : ${products.length} produits, ${categories.length} catégories, ${brands.length} marques, 2 promotions`);
+  // ─── Paramètres footer par défaut ────────────────────────────────────────
+  const footerExists = db.prepare("SELECT key FROM settings WHERE key = 'footer'").get();
+  if (!footerExists) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('footer', ?)").run(JSON.stringify({
+      description: "Votre spécialiste en pièces automobiles neuves et d'occasion. Livraison rapide partout au Sénégal.",
+      phone: '+221 77 000 00 00',
+      email: 'contact@dva-auto.sn',
+      address: 'Dakar, Sénégal',
+      copyright: `© ${new Date().getFullYear()} DVA Auto. Tous droits réservés.`,
+      badges: [
+        { title: 'Livraison rapide', desc: 'Partout au Sénégal' },
+        { title: 'Paiement sécurisé', desc: 'Wave, Orange Money, CB' },
+        { title: 'Retours garantis', desc: 'Sous conditions' },
+        { title: 'Pièces garanties', desc: 'Qualité certifiée' },
+      ],
+    }));
+  }
+
+  // ─── Slides bannière hero par défaut ─────────────────────────────────────
+  const heroExists = db.prepare("SELECT key FROM settings WHERE key = 'hero_slides'").get();
+  if (!heroExists) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('hero_slides', ?)").run(JSON.stringify([
+      { id: 1, title: 'Pièces de Frein de Qualité', subtitle: 'Plaquettes, disques, étriers — Marques Brembo, Bosch, EBC', cta: 'Voir les freins', link: '/catalogue?category=freins', bg: 'linear-gradient(135deg, #003DA5, #002880)', badge: "Jusqu'à -25%" },
+      { id: 2, title: 'Pneus Toutes Saisons', subtitle: 'Michelin, Continental, Bridgestone — Livraison express', cta: 'Choisir mes pneus', link: '/catalogue?category=pneus', bg: 'linear-gradient(135deg, #111827, #002880)', badge: 'Meilleur prix' },
+      { id: 3, title: 'Huiles & Filtres Premium', subtitle: 'Castrol, Total, Mann Filter — Compatibilité garantie', cta: 'Découvrir', link: '/catalogue?category=filtres', bg: 'linear-gradient(135deg, #002880, #1e293b)', badge: 'Nouveauté' },
+    ]));
+  }
+
+  // ─── Pages informations ───────────────────────────────────────────────────
+  seedPages(db);
+
+  console.log(`✅ Seed : ${products.length} produits, ${categories.length} catégories, ${brands.length} marques, 2 promotions, 5 pages`);
+}
+
+function seedPages(db) {
+  const insertPage = db.prepare(
+    'INSERT OR IGNORE INTO pages (slug, title, content) VALUES (?, ?, ?)'
+  );
+  const defaultPages = [
+    {
+      slug: 'qui-sommes-nous',
+      title: 'Qui sommes-nous ?',
+      content: `## Notre histoire\n\nDVA Auto est une entreprise sénégalaise fondée à Dakar, spécialisée dans la distribution de pièces automobiles neuves et de qualité. Depuis notre création, nous accompagnons les particuliers, les garages et les ateliers mécaniques avec des produits fiables aux meilleurs prix.\n\nNotre mission est simple : rendre accessibles des pièces auto de qualité certifiée, partout au Sénégal, avec un service client réactif et professionnel.\n\n## Notre engagement\n\n- Des produits 100% conformes aux normes constructeurs\n- Des marques reconnues : Brembo, Bosch, Michelin, Castrol, NGK et bien d'autres\n- Une livraison rapide partout au Sénégal\n- Un service après-vente disponible et à l'écoute\n- Des prix compétitifs sans compromis sur la qualité\n\n## Notre équipe\n\nNous sommes une équipe passionnée par l'automobile, composée de techniciens, de commerciaux et de logisticiens. Ensemble, nous mettons tout en œuvre pour vous offrir la meilleure expérience d'achat possible.\n\n## Contactez-nous\n\nPour toute question, notre équipe est disponible par téléphone, email ou directement dans nos locaux à Dakar.`,
+    },
+    {
+      slug: 'livraison-retours',
+      title: 'Livraison & retours',
+      content: `## Livraison\n\nDVA Auto assure la livraison de vos commandes partout au Sénégal. Nous travaillons avec des partenaires logistiques fiables pour garantir que vos pièces arrivent en parfait état et dans les meilleurs délais.\n\n## Délais de livraison\n\n- **Dakar et banlieue** : 24 à 48 heures ouvrées\n- **Autres régions du Sénégal** : 2 à 5 jours ouvrés\n- **Commandes urgentes** : livraison express disponible sur demande\n\n## Frais de livraison\n\nLes frais de livraison sont calculés en fonction du poids de votre commande et de votre zone géographique. Ils vous sont indiqués clairement lors de la validation de votre panier.\n\n## Politique de retour\n\nVous disposez de **7 jours** à compter de la réception de votre commande pour retourner un article, sous réserve que celui-ci soit dans son emballage d'origine, non utilisé et non endommagé.\n\n## Conditions de retour\n\n- L'article doit être retourné dans son emballage d'origine\n- L'article ne doit pas avoir été monté ou utilisé\n- La référence de commande doit être fournie\n- Les pièces spécifiques (joints, consommables) ne sont pas retournables\n\n## Procédure de retour\n\nPour initier un retour, contactez notre service client par email ou téléphone. Nous vous fournirons les instructions nécessaires et organiserons la récupération de l'article.`,
+    },
+    {
+      slug: 'mentions-legales',
+      title: 'Mentions légales',
+      content: `## Éditeur du site\n\n**DVA Auto**\nSociété à Responsabilité Limitée (SARL)\nSiège social : Dakar, Sénégal\nEmail : contact@dva-auto.sn\nTéléphone : +221 77 000 00 00\n\n## Directeur de la publication\n\nLe directeur de la publication est le gérant de la société DVA Auto.\n\n## Hébergement\n\nCe site est hébergé par un prestataire d'hébergement professionnel. Les informations de contact de l'hébergeur sont disponibles sur demande.\n\n## Propriété intellectuelle\n\nL'ensemble des contenus présents sur ce site (textes, images, logos, graphismes) est la propriété exclusive de DVA Auto ou de ses partenaires. Toute reproduction, représentation ou diffusion, totale ou partielle, de ces contenus sans autorisation préalable est strictement interdite.\n\n## Données personnelles\n\nConformément à la réglementation en vigueur sur la protection des données personnelles, vous disposez d'un droit d'accès, de rectification et de suppression de vos données. Pour exercer ces droits, contactez-nous à l'adresse email indiquée ci-dessus.\n\n## Cookies\n\nCe site utilise des cookies techniques nécessaires à son bon fonctionnement. Aucun cookie publicitaire ou de traçage tiers n'est utilisé sans votre consentement.`,
+    },
+    {
+      slug: 'cgv',
+      title: 'Conditions Générales de Vente',
+      content: `## Article 1 — Champ d'application\n\nLes présentes Conditions Générales de Vente (CGV) s'appliquent à toutes les commandes passées sur le site DVA Auto par tout client (particulier ou professionnel). Toute commande implique l'acceptation pleine et entière de ces CGV.\n\n## Article 2 — Prix\n\nLes prix affichés sur le site sont en Francs CFA (XOF), toutes taxes comprises. DVA Auto se réserve le droit de modifier ses prix à tout moment, mais les produits seront facturés au tarif en vigueur au moment de la validation de la commande.\n\n## Article 3 — Commandes\n\nToute commande est ferme et définitive après validation du paiement. DVA Auto se réserve le droit d'annuler ou de refuser toute commande en cas de stock insuffisant ou de problème lié au paiement.\n\n## Article 4 — Paiement\n\nLe paiement s'effectue en ligne via les moyens suivants :\n\n- Wave\n- Orange Money\n- Carte bancaire (Visa, Mastercard)\n\nLes paiements sont sécurisés. DVA Auto ne conserve aucune donnée bancaire.\n\n## Article 5 — Livraison\n\nLes délais et conditions de livraison sont détaillés dans notre page Livraison & Retours. DVA Auto ne saurait être tenu responsable des retards imputables aux transporteurs ou à des cas de force majeure.\n\n## Article 6 — Garanties\n\nTous les produits vendus sur DVA Auto bénéficient de la garantie légale de conformité. Les pièces de marque sont garanties selon les conditions du fabricant.\n\n## Article 7 — Droit de rétractation\n\nConformément à la réglementation en vigueur, le client particulier dispose d'un délai de 7 jours pour retourner un article non utilisé dans son emballage d'origine.\n\n## Article 8 — Responsabilité\n\nDVA Auto ne saurait être tenu responsable des dommages résultant d'une mauvaise installation des pièces. Il est recommandé de faire effectuer les réparations par un professionnel qualifié.`,
+    },
+    {
+      slug: 'politique-confidentialite',
+      title: 'Politique de confidentialité',
+      content: `## Introduction\n\nDVA Auto accorde une grande importance à la protection de vos données personnelles. Cette politique de confidentialité vous informe sur la façon dont nous collectons, utilisons et protégeons vos informations.\n\n## Données collectées\n\nLors de votre utilisation de notre site, nous sommes amenés à collecter les informations suivantes :\n\n- Informations d'identification : nom, prénom, adresse email\n- Informations de contact : numéro de téléphone, adresse de livraison\n- Données de navigation : pages visitées, produits consultés\n- Données de commande : historique d'achats, préférences\n\n## Utilisation des données\n\nVos données personnelles sont utilisées exclusivement pour :\n\n- Traiter et livrer vos commandes\n- Gérer votre compte client\n- Vous envoyer des confirmations de commande\n- Améliorer nos services et votre expérience\n- Respecter nos obligations légales\n\n## Protection des données\n\nNous mettons en place des mesures de sécurité techniques et organisationnelles pour protéger vos données contre tout accès non autorisé, perte ou divulgation. Les données sont stockées sur des serveurs sécurisés.\n\n## Vos droits\n\nConformément à la réglementation applicable, vous disposez des droits suivants :\n\n- Droit d'accès à vos données\n- Droit de rectification des données inexactes\n- Droit à l'effacement de vos données\n- Droit à la portabilité de vos données\n- Droit d'opposition au traitement\n\nPour exercer ces droits, contactez-nous à : contact@dva-auto.sn\n\n## Cookies\n\nNotre site utilise uniquement des cookies techniques nécessaires au fonctionnement du site (session utilisateur, panier). Aucun cookie publicitaire tiers n'est déposé sans votre accord explicite.\n\n## Contact\n\nPour toute question relative à cette politique de confidentialité, contactez notre délégué à la protection des données à l'adresse : contact@dva-auto.sn`,
+    },
+  ];
+  defaultPages.forEach((p) => insertPage.run(p.slug, p.title, p.content));
 }
 
 // Permettre d'exécuter le seed manuellement : node src/db/seed.js
@@ -784,4 +849,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { seedDatabase };
+module.exports = { seedDatabase, seedPages };

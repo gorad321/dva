@@ -72,9 +72,8 @@ export default function RegisterPage() {
       <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-1">
-              <span className="text-dva-blue font-black text-4xl">D</span>
-              <span className="text-dva-red font-black text-4xl">VA</span>
+            <Link to="/" className="inline-block">
+              <img src="/logo-dva.jpg" alt="DVA Auto" className="h-20 w-auto object-contain mx-auto" />
             </Link>
             <h1 className="text-2xl font-bold text-gray-800 mt-3">Créer un compte</h1>
             <p className="text-gray-500 mt-1">Rejoignez des milliers de clients satisfaits</p>

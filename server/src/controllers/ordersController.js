@@ -3,11 +3,12 @@
  */
 const { getDb } = require('../db/database');
 const { sendOrderConfirmationEmail } = require('../services/emailService');
+const { initiatePayment } = require('../services/paymentService');
 
 /**
  * POST /api/orders  — Créer une commande (checkout)
  */
-function createOrder(req, res, next) {
+async function createOrder(req, res, next) {
   try {
     const db = getDb();
     const { shipping_address, payment_method = 'card' } = req.body;
@@ -39,42 +40,48 @@ function createOrder(req, res, next) {
     }
 
     const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const shippingAmount = subtotal >= 25000 ? 0 : 2500; // Livraison gratuite dès 25 000 F CFA
-    const totalAmount = subtotal + shippingAmount;
+    const shippingAmount = 0; // Livraison gérée séparément après paiement
+    const totalAmount = subtotal;
 
-    // Créer la commande dans une transaction (atomique)
-    const createOrderTx = db.transaction(() => {
-      // Insérer la commande
+    // Statut selon méthode de paiement
+    const isCashOnDelivery = payment_method === 'cash_on_delivery';
+    const isMobilePay = payment_method === 'wave' || payment_method === 'orange_money';
+    const orderStatus = (isCashOnDelivery || isMobilePay) ? 'pending' : 'confirmed';
+    const paymentStatus = (isCashOnDelivery || isMobilePay) ? 'pending' : 'paid';
+
+    // Créer la commande dans une transaction manuelle (node:sqlite n'a pas .transaction())
+    let orderId;
+    db.exec('BEGIN');
+    try {
       const orderResult = db.prepare(`
         INSERT INTO orders (user_id, status, total_amount, shipping_amount, shipping_address, payment_method, payment_status)
-        VALUES (?, 'confirmed', ?, ?, ?, ?, 'paid')
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         req.user.id,
+        orderStatus,
         Math.round(totalAmount * 100) / 100,
         shippingAmount,
         JSON.stringify(shipping_address),
-        payment_method
+        payment_method,
+        paymentStatus
       );
-      const orderId = orderResult.lastInsertRowid;
+      orderId = orderResult.lastInsertRowid;
 
-      // Insérer les lignes de commande
       const insertItem = db.prepare(`
         INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
         VALUES (?, ?, ?, ?, ?)
       `);
       for (const item of cartItems) {
         insertItem.run(orderId, item.product_id, item.name, item.quantity, item.price);
-        // Décrémenter le stock
         db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
       }
 
-      // Vider le panier
       db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
-
-      return orderId;
-    });
-
-    const orderId = createOrderTx();
+      db.exec('COMMIT');
+    } catch (txErr) {
+      db.exec('ROLLBACK');
+      throw txErr;
+    }
 
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
@@ -82,7 +89,26 @@ function createOrder(req, res, next) {
     // Envoyer email de confirmation (non bloquant)
     sendOrderConfirmationEmail(req.user.email, req.user.first_name, { ...order, items }).catch(() => {});
 
-    return res.status(201).json({ order: { ...order, items } });
+    // Initier le paiement mobile (Wave / Orange Money) via PayTech
+    let paymentUrl = null;
+    if (isMobilePay) {
+      try {
+        const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
+        const result = await initiatePayment({ amount: totalAmount, orderId, apiUrl });
+        if (result?.paymentUrl) {
+          paymentUrl = result.paymentUrl;
+          // Stocker le token PayTech pour identifier la commande au retour (webhook / redirect)
+          if (result.token) {
+            db.prepare('UPDATE orders SET payment_token = ? WHERE id = ?').run(result.token, orderId);
+          }
+        }
+      } catch (payErr) {
+        console.error('Erreur initiation paiement:', payErr.message);
+        // Ne pas bloquer — la commande est créée, l'admin peut traiter manuellement
+      }
+    }
+
+    return res.status(201).json({ order: { ...order, items }, payment_url: paymentUrl });
   } catch (err) {
     next(err);
   }

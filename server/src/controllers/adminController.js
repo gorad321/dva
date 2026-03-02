@@ -3,6 +3,7 @@
  * Dashboard stats, CRUD produits, gestion commandes/utilisateurs/avis/promotions
  */
 const { getDb } = require('../db/database');
+const { invalidateCache } = require('../middleware/cache');
 
 // ─── DASHBOARD ─────────────────────────────────────────────────────────────
 
@@ -105,11 +106,14 @@ function createProduct(req, res, next) {
       return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug est déjà utilisé' } });
     }
 
+    // brand_id optionnel : utiliser le premier disponible par défaut
+    const resolvedBrandId = brand_id ? parseInt(brand_id) : (db.prepare('SELECT id FROM brands ORDER BY id ASC LIMIT 1').get()?.id || 1);
+
     const result = db.prepare(`
       INSERT INTO products (name, slug, description, short_description, price, original_price, stock, category_id, brand_id, sku, weight, is_featured)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(name, slug, description || null, short_description || null, parseFloat(price), original_price ? parseFloat(original_price) : null,
-      parseInt(stock || 0), parseInt(category_id), parseInt(brand_id), sku || null, weight ? parseFloat(weight) : null, is_featured ? 1 : 0);
+      parseInt(stock || 0), parseInt(category_id), resolvedBrandId, sku || null, weight ? parseFloat(weight) : null, is_featured ? 1 : 0);
 
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ product });
@@ -131,13 +135,16 @@ function updateProduct(req, res, next) {
     const slugConflict = db.prepare('SELECT id FROM products WHERE slug = ? AND id != ?').get(slug, id);
     if (slugConflict) return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug est déjà utilisé' } });
 
+    // brand_id optionnel : conserver l'existant si non fourni
+    const resolvedBrandId = brand_id ? parseInt(brand_id) : (db.prepare('SELECT brand_id FROM products WHERE id = ?').get(id)?.brand_id || 1);
+
     db.prepare(`
       UPDATE products SET name=?, slug=?, description=?, short_description=?, price=?, original_price=?,
       stock=?, category_id=?, brand_id=?, sku=?, weight=?, is_featured=?
       WHERE id=?
     `).run(name, slug, description || null, short_description || null, parseFloat(price),
       original_price ? parseFloat(original_price) : null, parseInt(stock || 0),
-      parseInt(category_id), parseInt(brand_id), sku || null, weight ? parseFloat(weight) : null,
+      parseInt(category_id), resolvedBrandId, sku || null, weight ? parseFloat(weight) : null,
       is_featured ? 1 : 0, id);
 
     const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
@@ -326,7 +333,7 @@ function deleteReview(req, res, next) {
 function getAdminPromotions(req, res, next) {
   try {
     const db = getDb();
-    const promotions = db.prepare('SELECT * FROM promotions ORDER BY created_at DESC').all();
+    const promotions = db.prepare('SELECT * FROM promotions ORDER BY id DESC').all();
     res.json({ promotions });
   } catch (err) {
     next(err);
@@ -508,6 +515,7 @@ function createCategory(req, res, next) {
     if (existing) return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug existe déjà' } });
     const result = db.prepare('INSERT INTO categories (name, slug, description, icon) VALUES (?, ?, ?, ?)').run(name, slug, description || null, icon || null);
     const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid);
+    invalidateCache('categories');
     res.status(201).json({ category: cat });
   } catch (err) { next(err); }
 }
@@ -522,6 +530,7 @@ function updateCategory(req, res, next) {
     const conflict = db.prepare('SELECT id FROM categories WHERE slug = ? AND id != ?').get(slug, id);
     if (conflict) return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug existe déjà' } });
     db.prepare('UPDATE categories SET name=?, slug=?, description=?, icon=? WHERE id=?').run(name, slug, description || null, icon || null, id);
+    invalidateCache('categories');
     res.json({ category: db.prepare('SELECT * FROM categories WHERE id = ?').get(id) });
   } catch (err) { next(err); }
 }
@@ -530,20 +539,79 @@ function deleteCategory(req, res, next) {
   try {
     const db = getDb();
     const { id } = req.params;
+    const withProducts = req.query.withProducts === 'true';
     const hasProducts = db.prepare('SELECT COUNT(*) AS c FROM products WHERE category_id = ?').get(id).c;
-    if (hasProducts > 0) return res.status(400).json({ error: { code: 'HAS_PRODUCTS', message: `Impossible : ${hasProducts} produit(s) utilisent cette catégorie` } });
+    if (hasProducts > 0 && !withProducts) {
+      return res.status(400).json({ error: { code: 'HAS_PRODUCTS', message: `Cette catégorie contient ${hasProducts} produit(s). Confirmez la suppression avec les produits.` } });
+    }
+    if (withProducts) {
+      db.prepare('DELETE FROM products WHERE category_id = ?').run(id);
+    }
     db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+    invalidateCache('categories');
     res.status(204).send();
+  } catch (err) { next(err); }
+}
+
+function getHeroSlides(req, res, next) {
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'hero_slides'").get();
+    res.json({ slides: row ? JSON.parse(row.value) : [] });
+  } catch (err) { next(err); }
+}
+
+function updateHeroSlides(req, res, next) {
+  try {
+    const db = getDb();
+    const { slides } = req.body;
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hero_slides', ?)").run(JSON.stringify(slides));
+    res.json({ slides });
+  } catch (err) { next(err); }
+}
+
+function getFooterSettings(req, res, next) {
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'footer'").get();
+    res.json({ footer: row ? JSON.parse(row.value) : {} });
+  } catch (err) { next(err); }
+}
+
+function updateFooterSettings(req, res, next) {
+  try {
+    const db = getDb();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('footer', ?)").run(JSON.stringify(req.body));
+    res.json({ footer: req.body });
+  } catch (err) { next(err); }
+}
+
+function getPaymentSettings(req, res, next) {
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'payment_settings'").get();
+    const defaults = { wave_number: '', orange_money_number: '' };
+    res.json({ payment: row ? { ...defaults, ...JSON.parse(row.value) } : defaults });
+  } catch (err) { next(err); }
+}
+
+function updatePaymentSettings(req, res, next) {
+  try {
+    const db = getDb();
+    const { wave_number, orange_money_number } = req.body;
+    const data = { wave_number: wave_number || '', orange_money_number: orange_money_number || '' };
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('payment_settings', ?)").run(JSON.stringify(data));
+    res.json({ payment: data });
   } catch (err) { next(err); }
 }
 
 function createBrand(req, res, next) {
   try {
     const db = getDb();
-    const { name, slug } = req.body;
+    const { name, slug, logo_url } = req.body;
     const existing = db.prepare('SELECT id FROM brands WHERE slug = ?').get(slug);
     if (existing) return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug existe déjà' } });
-    const result = db.prepare('INSERT INTO brands (name, slug) VALUES (?, ?)').run(name, slug);
+    const result = db.prepare('INSERT INTO brands (name, slug, logo_url) VALUES (?, ?, ?)').run(name, slug, logo_url || null);
     const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ brand });
   } catch (err) { next(err); }
@@ -553,12 +621,12 @@ function updateBrand(req, res, next) {
   try {
     const db = getDb();
     const { id } = req.params;
-    const { name, slug } = req.body;
+    const { name, slug, logo_url } = req.body;
     const existing = db.prepare('SELECT id FROM brands WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Marque introuvable' } });
     const conflict = db.prepare('SELECT id FROM brands WHERE slug = ? AND id != ?').get(slug, id);
     if (conflict) return res.status(409).json({ error: { code: 'SLUG_TAKEN', message: 'Ce slug existe déjà' } });
-    db.prepare('UPDATE brands SET name=?, slug=? WHERE id=?').run(name, slug, id);
+    db.prepare('UPDATE brands SET name=?, slug=?, logo_url=? WHERE id=?').run(name, slug, logo_url || null, id);
     res.json({ brand: db.prepare('SELECT * FROM brands WHERE id = ?').get(id) });
   } catch (err) { next(err); }
 }
@@ -571,6 +639,29 @@ function deleteBrand(req, res, next) {
     if (hasProducts > 0) return res.status(400).json({ error: { code: 'HAS_PRODUCTS', message: `Impossible : ${hasProducts} produit(s) utilisent cette marque` } });
     db.prepare('DELETE FROM brands WHERE id = ?').run(id);
     res.status(204).send();
+  } catch (err) { next(err); }
+}
+
+// ─── PAGES INFORMATIONS ────────────────────────────────────────────────────
+
+function getAdminPages(req, res, next) {
+  try {
+    const db = getDb();
+    const pages = db.prepare('SELECT * FROM pages ORDER BY id ASC').all();
+    res.json({ pages });
+  } catch (err) { next(err); }
+}
+
+function updatePage(req, res, next) {
+  try {
+    const db = getDb();
+    const { slug } = req.params;
+    const { title, content } = req.body;
+    const existing = db.prepare('SELECT id FROM pages WHERE slug = ?').get(slug);
+    if (!existing) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Page introuvable' } });
+    db.prepare('UPDATE pages SET title=?, content=?, updated_at=CURRENT_TIMESTAMP WHERE slug=?').run(title, content, slug);
+    const page = db.prepare('SELECT * FROM pages WHERE slug = ?').get(slug);
+    res.json({ page });
   } catch (err) { next(err); }
 }
 
@@ -664,4 +755,8 @@ module.exports = {
   createCategory, updateCategory, deleteCategory,
   createBrand, updateBrand, deleteBrand,
   exportProducts, exportOrders, exportUsers,
+  getFooterSettings, updateFooterSettings,
+  getHeroSlides, updateHeroSlides,
+  getAdminPages, updatePage,
+  getPaymentSettings, updatePaymentSettings,
 };

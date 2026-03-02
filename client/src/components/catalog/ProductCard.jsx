@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Star } from 'lucide-react';
+import { ShoppingCart, Star, Eye } from 'lucide-react';
 import LazyImage from '../common/LazyImage';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +12,7 @@ export default function ProductCard({ product }) {
   const { user } = useAuth();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const [bouncing, setBouncing] = useState(false);
 
   const hasPromo = product.original_price && product.original_price > product.price;
   const discount = hasPromo
@@ -25,6 +26,7 @@ export default function ProductCard({ product }) {
       return;
     }
     setAdding(true);
+    setBouncing(true);
     try {
       await addItem(product.id, 1);
       toast.success(`"${product.name}" ajouté au panier`);
@@ -32,18 +34,25 @@ export default function ProductCard({ product }) {
       toast.error(err.response?.data?.error?.message || 'Erreur lors de l\'ajout');
     } finally {
       setAdding(false);
+      setTimeout(() => setBouncing(false), 400);
     }
   };
 
   return (
     <Link to={`/produit/${product.slug}`} className="product-card group block">
-      {/* Image */}
-      <div className="relative">
+      {/* Image avec zoom + overlay au survol */}
+      <div className="relative product-img-wrap">
         <LazyImage
           src={product.image_url || 'https://picsum.photos/seed/default/400/300'}
           alt={product.image_alt || product.name}
           className="h-44 w-full"
         />
+        {/* Overlay "Voir le produit" */}
+        <div className="product-overlay absolute inset-0 bg-dva-blue/10 flex items-center justify-center">
+          <span className="bg-white/90 text-dva-blue text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
+            <Eye className="w-3.5 h-3.5" /> Voir le produit
+          </span>
+        </div>
         {/* Badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {hasPromo && <span className="badge-promo">-{discount}%</span>}
@@ -88,7 +97,7 @@ export default function ProductCard({ product }) {
           <button
             onClick={handleAddToCart}
             disabled={adding || product.stock === 0}
-            className="bg-dva-blue hover:bg-dva-blue-dark text-white rounded-lg p-2 transition-colors disabled:opacity-50"
+            className={`bg-dva-blue hover:bg-dva-blue-dark text-white rounded-lg p-2 transition-colors disabled:opacity-50 ${bouncing ? 'cart-btn-bounce' : ''}`}
             title="Ajouter au panier"
           >
             <ShoppingCart className="w-4 h-4" />

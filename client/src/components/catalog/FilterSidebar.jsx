@@ -105,11 +105,11 @@ export default function FilterSidebar({ filters, onChange }) {
         </button>
         {openSections.price && (
           <div className="flex gap-2 items-center">
-            <input type="number" min="0" placeholder="Min €" value={filters.minPrice || ''}
+            <input type="number" min="0" placeholder="Min F CFA" value={filters.minPrice || ''}
               onChange={(e) => onChange({ ...filters, minPrice: e.target.value })}
               className="input-dva w-full" />
             <span className="text-gray-400">–</span>
-            <input type="number" min="0" placeholder="Max €" value={filters.maxPrice || ''}
+            <input type="number" min="0" placeholder="Max F CFA" value={filters.maxPrice || ''}
               onChange={(e) => onChange({ ...filters, maxPrice: e.target.value })}
               className="input-dva w-full" />
           </div>

@@ -53,4 +53,27 @@ export const adminApi = {
 
   // Export CSV (téléchargement direct via URL)
   exportUrl: (type) => `/api/admin/export/${type}`,
+
+  // Footer settings
+  getFooterSettings: () => axiosClient.get('/settings/footer'),
+  updateFooterSettings: (data) => axiosClient.put('/admin/settings/footer', data),
+
+  // Hero slides
+  getHeroSlides: () => axiosClient.get('/admin/settings/hero'),
+  updateHeroSlides: (slides) => axiosClient.put('/admin/settings/hero', { slides }),
+
+  // Supprimer catégorie + ses produits
+  deleteCategoryWithProducts: (id) => axiosClient.delete(`/admin/categories/${id}?withProducts=true`),
+
+  // Pages informations
+  getPages: () => axiosClient.get('/admin/pages'),
+  updatePage: (slug, data) => axiosClient.put(`/admin/pages/${slug}`, data),
+
+  // Autocomplete véhicule (pour compat produit)
+  getVehicleMakes: () => axiosClient.get('/vehicle/makes'),
+  getVehicleModels: (make) => axiosClient.get(`/vehicle/models?make=${encodeURIComponent(make)}`),
+
+  // Paramètres paiement
+  getPaymentSettings: () => axiosClient.get('/admin/settings/payment'),
+  updatePaymentSettings: (data) => axiosClient.put('/admin/settings/payment', data),
 };

@@ -15,9 +15,12 @@ const router = Router();
 router.get('/makes', (req, res, next) => {
   try {
     const db = getDb();
-    const makes = db.prepare(
-      'SELECT DISTINCT make FROM vehicle_compatibility ORDER BY make ASC'
-    ).all().map((r) => r.make);
+    const makes = db.prepare(`
+      SELECT DISTINCT vc.make
+      FROM vehicle_compatibility vc
+      JOIN products p ON p.id = vc.product_id AND p.stock > 0
+      ORDER BY vc.make ASC
+    `).all().map((r) => r.make);
     res.json({ makes });
   } catch (err) {
     next(err);
@@ -33,9 +36,13 @@ router.get('/models', [
 ], (req, res, next) => {
   try {
     const db = getDb();
-    const models = db.prepare(
-      'SELECT DISTINCT model FROM vehicle_compatibility WHERE make = ? ORDER BY model ASC'
-    ).all(req.query.make).map((r) => r.model);
+    const models = db.prepare(`
+      SELECT DISTINCT vc.model
+      FROM vehicle_compatibility vc
+      JOIN products p ON p.id = vc.product_id AND p.stock > 0
+      WHERE vc.make = ?
+      ORDER BY vc.model ASC
+    `).all(req.query.make).map((r) => r.model);
     res.json({ models });
   } catch (err) {
     next(err);
@@ -52,9 +59,12 @@ router.get('/years', [
 ], (req, res, next) => {
   try {
     const db = getDb();
-    const rows = db.prepare(
-      'SELECT DISTINCT year_from, year_to FROM vehicle_compatibility WHERE make = ? AND model = ?'
-    ).all(req.query.make, req.query.model);
+    const rows = db.prepare(`
+      SELECT DISTINCT vc.year_from, vc.year_to
+      FROM vehicle_compatibility vc
+      JOIN products p ON p.id = vc.product_id AND p.stock > 0
+      WHERE vc.make = ? AND vc.model = ?
+    `).all(req.query.make, req.query.model);
 
     const yearsSet = new Set();
     rows.forEach(({ year_from, year_to }) => {
@@ -75,7 +85,6 @@ router.get('/years', [
  */
 router.get('/products', [
   query('make').trim().notEmpty().withMessage('Marque requise'),
-  query('model').trim().notEmpty().withMessage('Modèle requis'),
   handleValidation,
 ], (req, res, next) => {
   try {
@@ -94,9 +103,14 @@ router.get('/products', [
       JOIN vehicle_compatibility vc ON vc.product_id = p.id
       JOIN categories c ON c.id = p.category_id
       JOIN brands b ON b.id = p.brand_id
-      WHERE vc.make = ? AND vc.model = ?
+      WHERE vc.make = ? AND p.stock > 0
     `;
-    const params = [make, model];
+    const params = [make];
+
+    if (model) {
+      sql += ' AND vc.model = ?';
+      params.push(model);
+    }
 
     if (year) {
       sql += ' AND (vc.year_from IS NULL OR vc.year_from <= ?) AND (vc.year_to IS NULL OR vc.year_to >= ?)';
@@ -107,7 +121,7 @@ router.get('/products', [
 
     const products = db.prepare(sql).all(...params);
 
-    res.json({ products, vehicle: { make, model, year: year || null } });
+    res.json({ products, vehicle: { make, model: model || null, year: year || null } });
   } catch (err) {
     next(err);
   }

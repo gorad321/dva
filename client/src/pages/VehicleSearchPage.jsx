@@ -65,7 +65,7 @@ function VehicleSearchContent() {
   }, [vehicle.model]);
 
   const handleSearch = async () => {
-    if (!vehicle.make || !vehicle.model) return;
+    if (!vehicle.make) return;
     setLoading(true);
     setSearched(true);
     try {
@@ -125,14 +125,14 @@ function VehicleSearchContent() {
 
             {/* Modèle */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Modèle *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Modèle (optionnel)</label>
               <select
                 value={vehicle.model}
                 onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value, year: '' }))}
-                disabled={!vehicle.make}
+                disabled={!vehicle.make || models.length === 0}
                 className="input-dva disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="">— Choisir un modèle —</option>
+                <option value="">— Tous les modèles —</option>
                 {models.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
@@ -155,7 +155,7 @@ function VehicleSearchContent() {
           <div className="flex gap-3">
             <button
               onClick={handleSearch}
-              disabled={!vehicle.make || !vehicle.model || loading}
+              disabled={!vehicle.make || loading}
               className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Search className="w-4 h-4" />

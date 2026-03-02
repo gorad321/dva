@@ -1,11 +1,22 @@
+import { useEffect, useState } from 'react';
 import SEOMeta from '../components/common/SEOMeta';
 import HeroBanner from '../components/home/HeroBanner';
 import CategoryGrid from '../components/home/CategoryGrid';
 import ProductCarousel from '../components/home/ProductCarousel';
 import PromoSection from '../components/home/PromoSection';
+import BrandScrollBanner from '../components/home/BrandScrollBanner';
 import { ToastProvider } from '../components/common/Toast';
+import axiosClient from '../api/axiosClient';
 
 export default function HomePage() {
+  const [brands, setBrands] = useState([]);
+
+  useEffect(() => {
+    axiosClient.get('/brands')
+      .then((r) => setBrands(r.data.brands || []))
+      .catch(() => {});
+  }, []);
+
   return (
     <ToastProvider>
       <SEOMeta
@@ -17,21 +28,7 @@ export default function HomePage() {
       <PromoSection />
       <ProductCarousel />
 
-      {/* Section marques partenaires */}
-      <section className="py-10 border-t border-gray-100">
-        <div className="container-main">
-          <h2 className="text-center text-sm font-semibold text-gray-500 uppercase tracking-wider mb-8">
-            Nos marques partenaires
-          </h2>
-          <div className="flex flex-wrap items-center justify-center gap-8">
-            {['Brembo', 'Bosch', 'Michelin', 'Continental', 'Varta', 'Castrol', 'NGK', 'Dayco', 'K&N', 'Mann Filter'].map((brand) => (
-              <span key={brand} className="text-gray-400 font-bold text-lg hover:text-dva-blue transition-colors cursor-pointer">
-                {brand}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
+      <BrandScrollBanner brands={brands} />
     </ToastProvider>
   );
 }

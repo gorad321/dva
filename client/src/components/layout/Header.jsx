@@ -2,22 +2,14 @@
  * DVA - En-tête principal (Header)
  * Design : fond bleu foncé, logo blanc, navigation, icônes panier/compte
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, User, Menu, X, ChevronDown, LogOut, Package, Car, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import SearchBar from './SearchBar';
 import MobileMenu from './MobileMenu';
-
-const CATEGORIES = [
-  { name: 'Freins', slug: 'freins' },
-  { name: 'Filtres', slug: 'filtres' },
-  { name: 'Pneus', slug: 'pneus' },
-  { name: 'Batteries', slug: 'batteries' },
-  { name: 'Huiles & Liquides', slug: 'huiles-liquides' },
-  { name: 'Allumage', slug: 'allumage-distribution' },
-];
+import axiosClient from '../../api/axiosClient';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -25,6 +17,13 @@ export default function Header() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    axiosClient.get('/categories')
+      .then((r) => setCategories(r.data.categories || []))
+      .catch(() => {});
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -34,21 +33,21 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40">
-      {/* Bandeau supérieur bleu foncé */}
-      <div className="bg-dva-blue-dark text-white text-xs py-1 text-center hidden md:block">
-        🚗 Pièces automobiles neuves et d'occasion &nbsp;|&nbsp; Paiement sécurisé
+      {/* Bandeau supérieur */}
+      <div className="bg-dva-blue text-white text-xs py-1 text-center hidden md:block">
+        Pièces de froid auto neuves et d'occasions &nbsp;|&nbsp; Paiement sécurisé
       </div>
 
       {/* Barre principale */}
-      <div className="bg-dva-blue shadow-md">
+      <div className="bg-dva-blue-light shadow-md">
         <div className="container-main flex items-center gap-4 h-16">
           {/* Logo */}
-          <Link to="/" className="flex-shrink-0 flex items-center gap-2">
-            <div className="bg-white rounded px-2 py-1">
-              <span className="text-dva-blue font-black text-xl leading-none">D</span>
-              <span className="text-dva-red font-black text-xl leading-none">VA</span>
-            </div>
-            <span className="text-white font-semibold text-sm hidden sm:block">Pièces Auto</span>
+          <Link to="/" className="flex-shrink-0">
+            <img
+              src="lago_bi.png"
+              alt="DVA"
+              className="h-12 w-auto object-contain"
+            />
           </Link>
 
           {/* Barre de recherche (desktop) */}
@@ -145,7 +144,7 @@ export default function Header() {
       {/* Barre de navigation catégories (desktop) */}
       <nav className="bg-dva-blue-dark hidden md:block">
         <div className="container-main flex items-center gap-0">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <Link
               key={cat.slug}
               to={`/catalogue?category=${cat.slug}`}
@@ -175,7 +174,7 @@ export default function Header() {
       )}
 
       {/* Menu mobile */}
-      <MobileMenu isOpen={mobileOpen} onClose={() => setMobileOpen(false)} categories={CATEGORIES} />
+      <MobileMenu isOpen={mobileOpen} onClose={() => setMobileOpen(false)} categories={categories} />
     </header>
   );
 }

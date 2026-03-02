@@ -23,6 +23,7 @@ const ForgotPasswordPage    = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage     = lazy(() => import('./pages/ResetPasswordPage'));
 const VehicleSearchPage     = lazy(() => import('./pages/VehicleSearchPage'));
 const AdminPage             = lazy(() => import('./pages/AdminPage'));
+const InfoPage              = lazy(() => import('./pages/InfoPage'));
 
 const PageSpinner = () => (
   <div className="flex justify-center items-center min-h-[400px]"><Spinner size="lg" /></div>
@@ -59,38 +60,42 @@ function AppRoutes() {
       {!isAdmin && <Header />}
       <main className="flex-1">
         <Suspense fallback={<PageSpinner />}>
-          <Routes>
-            {/* Publiques */}
-            <Route path="/"                       element={<HomePage />} />
-            <Route path="/catalogue"              element={<CatalogPage />} />
-            <Route path="/produit/:slug"           element={<ProductPage />} />
-            <Route path="/panier"                  element={<CartPage />} />
-            <Route path="/recherche-vehicule"      element={<VehicleSearchPage />} />
+          {/* key={location.key} force le remount → déclenche l'animation CSS page-enter */}
+          <div key={location.key} className="page-enter">
+            <Routes>
+              {/* Publiques */}
+              <Route path="/"                       element={<HomePage />} />
+              <Route path="/catalogue"              element={<CatalogPage />} />
+              <Route path="/produit/:slug"           element={<ProductPage />} />
+              <Route path="/panier"                  element={<CartPage />} />
+              <Route path="/recherche-vehicule"      element={<VehicleSearchPage />} />
+              <Route path="/informations/:slug"      element={<InfoPage />} />
 
-            {/* Protégées client */}
-            <Route path="/commande" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-            <Route path="/commande/confirmation/:id" element={<ProtectedRoute><OrderConfirmationPage /></ProtectedRoute>} />
-            <Route path="/mon-compte" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
+              {/* Protégées client */}
+              <Route path="/commande" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+              <Route path="/commande/confirmation/:id" element={<ProtectedRoute><OrderConfirmationPage /></ProtectedRoute>} />
+              <Route path="/mon-compte" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
 
-            {/* Invité */}
-            <Route path="/connexion"   element={<GuestRoute><LoginPage /></GuestRoute>} />
-            <Route path="/inscription" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-            <Route path="/mot-de-passe-oublie" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
-            <Route path="/reinitialisation-mot-de-passe/:token" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
+              {/* Invité */}
+              <Route path="/connexion"   element={<GuestRoute><LoginPage /></GuestRoute>} />
+              <Route path="/inscription" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+              <Route path="/mot-de-passe-oublie" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+              <Route path="/reinitialisation-mot-de-passe/:token" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
 
-            {/* Admin */}
-            <Route path="/admin/*" element={<AdminRoute><AdminPage /></AdminRoute>} />
-            <Route path="/admin"   element={<AdminRoute><AdminPage /></AdminRoute>} />
+              {/* Admin */}
+              <Route path="/admin/*" element={<AdminRoute><AdminPage /></AdminRoute>} />
+              <Route path="/admin"   element={<AdminRoute><AdminPage /></AdminRoute>} />
 
-            {/* 404 */}
-            <Route path="*" element={
-              <div className="container-main py-20 text-center">
-                <h1 className="text-6xl font-bold text-dva-blue mb-4">404</h1>
-                <p className="text-xl text-gray-600 mb-8">Page introuvable</p>
-                <a href="/" className="btn-primary">Retour à l'accueil</a>
-              </div>
-            } />
-          </Routes>
+              {/* 404 */}
+              <Route path="*" element={
+                <div className="container-main py-20 text-center">
+                  <h1 className="text-6xl font-bold text-dva-blue mb-4">404</h1>
+                  <p className="text-xl text-gray-600 mb-8">Page introuvable</p>
+                  <a href="/" className="btn-primary">Retour à l'accueil</a>
+                </div>
+              } />
+            </Routes>
+          </div>
         </Suspense>
       </main>
       {!isAdmin && <Footer />}

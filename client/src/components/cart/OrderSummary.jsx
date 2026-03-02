@@ -3,7 +3,7 @@ import { Tag } from 'lucide-react';
 import Button from '../common/Button';
 import { ordersApi } from '../../api/ordersApi';
 import { useToast } from '../common/Toast';
-import { formatCFA, FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from '../../utils/currency';
+import { formatCFA } from '../../utils/currency';
 
 export default function OrderSummary({ total, onCheckout, showPromo = true }) {
   const toast = useToast();
@@ -11,9 +11,8 @@ export default function OrderSummary({ total, onCheckout, showPromo = true }) {
   const [promo, setPromo] = useState(null);
   const [promoLoading, setPromoLoading] = useState(false);
 
-  const shipping = total >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
   const discount = promo ? promo.discount_amount : 0;
-  const finalTotal = Math.max(0, total - discount + shipping);
+  const finalTotal = Math.max(0, total - discount);
 
   const handleApplyPromo = async () => {
     if (!promoCode.trim()) return;
@@ -45,17 +44,9 @@ export default function OrderSummary({ total, onCheckout, showPromo = true }) {
             <span>-{formatCFA(discount)}</span>
           </div>
         )}
-        <div className="flex justify-between text-gray-600">
-          <span>Livraison</span>
-          <span className={shipping === 0 ? 'text-green-600 font-medium' : ''}>
-            {shipping === 0 ? 'Gratuite' : formatCFA(shipping)}
-          </span>
+        <div className="text-xs text-dva-blue bg-blue-50 rounded-lg px-3 py-2">
+          Les frais de livraison seront calculés après confirmation de la commande.
         </div>
-        {shipping > 0 && (
-          <p className="text-xs text-dva-blue">
-            Encore {formatCFA(FREE_SHIPPING_THRESHOLD - total)} pour la livraison gratuite
-          </p>
-        )}
         <div className="flex justify-between font-bold text-gray-900 text-base pt-3 border-t border-gray-100">
           <span>Total TTC</span>
           <span className="text-dva-red text-lg">{formatCFA(finalTotal)}</span>

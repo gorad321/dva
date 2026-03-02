@@ -3,6 +3,8 @@ import {
   LayoutDashboard, Package, ShoppingBag, Users, Star, Tag, Layers, Award,
   TrendingUp, ShoppingCart, Pencil, Trash2, Plus, X, ChevronLeft, ChevronRight,
   Search, ToggleLeft, ToggleRight, Eye, Download, Image, Settings, Car,
+  Disc, Filter, Circle, Zap, Droplets, Wrench, Gauge, Thermometer, Battery,
+  Wind, Shield, Box, Cog, Bolt, Smartphone,
 } from 'lucide-react';
 import SEOMeta from '../components/common/SEOMeta';
 import Spinner from '../components/common/Spinner';
@@ -251,6 +253,7 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
   const [newImage, setNewImage] = useState({ url: '', alt_text: '', is_primary: false });
   const [newSpec, setNewSpec] = useState({ spec_key: '', spec_value: '' });
   const [newCompat, setNewCompat] = useState({ make: '', model: '', year_from: '', year_to: '', engine: '' });
+  const [quickVehicle, setQuickVehicle] = useState({ make: '', model: '' });
 
   useEffect(() => {
     if (product?.id) {
@@ -274,9 +277,26 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
     try {
       if (product?.id) {
         await adminApi.updateProduct(product.id, form);
+        // Ajouter la compatibilité rapide si remplie
+        if (quickVehicle.make && quickVehicle.model) {
+          await adminApi.addProductCompat(product.id, quickVehicle);
+          setQuickVehicle({ make: '', model: '' });
+        }
         toast.success('Produit mis à jour');
       } else {
-        await adminApi.createProduct(form);
+        const r = await adminApi.createProduct(form);
+        const newId = r.data.product?.id;
+        // Sauvegarder les compatibilités de l'onglet compat
+        if (newId && compat.length > 0) {
+          for (const c of compat) {
+            const { id, ...data } = c;
+            await adminApi.addProductCompat(newId, data);
+          }
+        }
+        // Sauvegarder la compatibilité rapide si remplie
+        if (newId && quickVehicle.make && quickVehicle.model) {
+          await adminApi.addProductCompat(newId, quickVehicle);
+        }
         toast.success('Produit créé');
       }
       onSave();
@@ -316,15 +336,26 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
   };
 
   const handleAddCompat = async () => {
-    if (!newCompat.make || !newCompat.model || !product?.id) return;
-    try {
-      const r = await adminApi.addProductCompat(product.id, newCompat);
-      setCompat((prev) => [...prev, r.data.compat]);
+    if (!newCompat.make || !newCompat.model) return;
+    if (product?.id) {
+      // Produit existant : sauvegarde immédiate en BDD
+      try {
+        const r = await adminApi.addProductCompat(product.id, newCompat);
+        setCompat((prev) => [...prev, r.data.compat]);
+        setNewCompat({ make: '', model: '', year_from: '', year_to: '', engine: '' });
+      } catch (err) { toast.error(err.response?.data?.error?.message || 'Erreur'); }
+    } else {
+      // Nouveau produit : stockage local, sera sauvegardé après création
+      setCompat((prev) => [...prev, { ...newCompat, id: `_tmp_${Date.now()}` }]);
       setNewCompat({ make: '', model: '', year_from: '', year_to: '', engine: '' });
-    } catch (err) { toast.error(err.response?.data?.error?.message || 'Erreur'); }
+    }
   };
 
   const handleDeleteCompat = async (id) => {
+    if (String(id).startsWith('_tmp_')) {
+      setCompat((prev) => prev.filter((c) => c.id !== id));
+      return;
+    }
     try { await adminApi.deleteProductCompat(id); setCompat((prev) => prev.filter((c) => c.id !== id)); }
     catch { toast.error('Erreur'); }
   };
@@ -334,8 +365,8 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
     ...(product?.id ? [
       { id: 'images', label: `Images (${images.length})`, icon: Image },
       { id: 'specs', label: `Specs (${specs.length})`, icon: Settings },
-      { id: 'compat', label: `Véhicules (${compat.length})`, icon: Car },
     ] : []),
+    { id: 'compat', label: `Véhicules (${compat.length})`, icon: Car },
   ];
 
   return (
@@ -346,18 +377,16 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
           <button onClick={onClose}><X className="w-5 h-5 text-gray-500" /></button>
         </div>
 
-        {product?.id && (
-          <div className="flex border-b px-5 overflow-x-auto">
-            {MODAL_TABS.map(({ id, label, icon: Icon }) => (
-              <button key={id} onClick={() => setTab(id)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  tab === id ? 'border-dva-blue text-dva-blue' : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}>
-                <Icon className="w-3.5 h-3.5" /> {label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex border-b px-5 overflow-x-auto">
+          {MODAL_TABS.map(({ id, label, icon: Icon }) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab === id ? 'border-dva-blue text-dva-blue' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
 
         <div className="p-5">
           {tab === 'info' && (
@@ -371,6 +400,7 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Slug *</label>
                   <input className="input-dva font-mono text-sm" value={form.slug} required onChange={(e) => f('slug', e.target.value)} />
+                  <p className="text-xs text-gray-400 mt-1">URL du produit, généré automatiquement (ex: plaquettes-brembo-bmw)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Prix (F CFA) *</label>
@@ -389,19 +419,13 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
                   <input className="input-dva" value={form.sku || ''} onChange={(e) => f('sku', e.target.value)} />
+                  <p className="text-xs text-gray-400 mt-1">Référence interne unique (ex: BRE-BP001)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie *</label>
                   <select className="input-dva" value={form.category_id} required onChange={(e) => f('category_id', e.target.value)}>
                     <option value="">— Choisir —</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Marque *</label>
-                  <select className="input-dva" value={form.brand_id} required onChange={(e) => f('brand_id', e.target.value)}>
-                    <option value="">— Choisir —</option>
-                    {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -418,6 +442,24 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
                   onChange={(e) => f('is_featured', e.target.checked)} className="w-4 h-4 accent-dva-blue" />
                 <label htmlFor="featured" className="text-sm text-gray-700">Produit vedette (page d'accueil)</label>
               </div>
+
+              {/* Compatibilité véhicule rapide */}
+              <div className="border border-dva-blue/20 rounded-xl p-4 bg-blue-50/40">
+                <div className="flex items-center gap-2 mb-3">
+                  <Car className="w-4 h-4 text-dva-blue" />
+                  <p className="text-sm font-semibold text-dva-blue">Véhicule compatible</p>
+                  <span className="text-xs text-gray-400">(optionnel — visible dans "Mon véhicule")</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input className="input-dva text-sm" placeholder="Marque (ex: Renault)"
+                    value={quickVehicle.make}
+                    onChange={(e) => setQuickVehicle((v) => ({ ...v, make: e.target.value }))} />
+                  <input className="input-dva text-sm" placeholder="Modèle (ex: Clio)"
+                    value={quickVehicle.model}
+                    onChange={(e) => setQuickVehicle((v) => ({ ...v, model: e.target.value }))} />
+                </div>
+              </div>
+
               <div className="flex gap-3 justify-end pt-2 border-t">
                 <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">Annuler</button>
                 <Button type="submit" loading={saving}>{product?.id ? 'Enregistrer' : 'Créer'}</Button>
@@ -525,15 +567,15 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
                   <div className="border-t pt-4 space-y-2">
                     <p className="text-sm font-medium text-gray-700">Ajouter une compatibilité</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <input className="input-dva text-sm" placeholder="Marque * (ex: BMW)" value={newCompat.make}
+                      <input className="input-dva text-sm" placeholder="Marque * (ex: Renault)" value={newCompat.make}
                         onChange={(e) => setNewCompat((n) => ({ ...n, make: e.target.value }))} />
-                      <input className="input-dva text-sm" placeholder="Modèle * (ex: Série 3)" value={newCompat.model}
+                      <input className="input-dva text-sm" placeholder="Modèle * (ex: Clio)" value={newCompat.model}
                         onChange={(e) => setNewCompat((n) => ({ ...n, model: e.target.value }))} />
-                      <input className="input-dva text-sm" placeholder="Année début" type="number" value={newCompat.year_from}
+                      <input className="input-dva text-sm" placeholder="Année début (ex: 2015)" type="number" value={newCompat.year_from}
                         onChange={(e) => setNewCompat((n) => ({ ...n, year_from: e.target.value }))} />
-                      <input className="input-dva text-sm" placeholder="Année fin" type="number" value={newCompat.year_to}
+                      <input className="input-dva text-sm" placeholder="Année fin (ex: 2022)" type="number" value={newCompat.year_to}
                         onChange={(e) => setNewCompat((n) => ({ ...n, year_to: e.target.value }))} />
-                      <input className="input-dva text-sm col-span-2" placeholder="Motorisation (ex: 2.0 TDI 150ch)" value={newCompat.engine}
+                      <input className="input-dva text-sm col-span-2" placeholder="Motorisation (ex: 1.5 dCi 110ch)" value={newCompat.engine}
                         onChange={(e) => setNewCompat((n) => ({ ...n, engine: e.target.value }))} />
                     </div>
                     <Button size="sm" onClick={handleAddCompat} disabled={!newCompat.make || !newCompat.model}>
@@ -559,14 +601,24 @@ function ProductsTab() {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
+  // Debounce : attend 350ms après la dernière frappe avant de lancer la requête
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
   const load = useCallback(() => {
     setLoading(true);
-    adminApi.getProducts({ page, limit: 15, q }).then((r) => setData(r.data)).finally(() => setLoading(false));
-  }, [page, q]);
+    adminApi.getProducts({ page, limit: 15, q: debouncedQ })
+      .then((r) => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [page, debouncedQ]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -1054,9 +1106,123 @@ function PromotionsTab() {
 
 // ─── Catégories & Marques (composant partagé) ─────────────────────────────────
 
+const AVAILABLE_ICONS = [
+  { key: 'disc',        Icon: Disc,        label: 'Disque' },
+  { key: 'filter',      Icon: Filter,      label: 'Filtre' },
+  { key: 'circle',      Icon: Circle,      label: 'Cercle' },
+  { key: 'zap',         Icon: Zap,         label: 'Éclair' },
+  { key: 'droplets',    Icon: Droplets,    label: 'Liquide' },
+  { key: 'settings',    Icon: Settings,    label: 'Engrenage' },
+  { key: 'wrench',      Icon: Wrench,      label: 'Clé' },
+  { key: 'car',         Icon: Car,         label: 'Voiture' },
+  { key: 'gauge',       Icon: Gauge,       label: 'Jauge' },
+  { key: 'thermometer', Icon: Thermometer, label: 'Thermomètre' },
+  { key: 'battery',     Icon: Battery,     label: 'Batterie' },
+  { key: 'wind',        Icon: Wind,        label: 'Ventilation' },
+  { key: 'shield',      Icon: Shield,      label: 'Protection' },
+  { key: 'box',         Icon: Box,         label: 'Boîte' },
+  { key: 'cog',         Icon: Cog,         label: 'Roue dentée' },
+  { key: 'bolt',        Icon: Bolt,        label: 'Boulon' },
+  { key: 'layers',      Icon: Layers,      label: 'Couches' },
+  { key: 'package',     Icon: Package,     label: 'Colis' },
+  { key: 'star',        Icon: Star,        label: 'Étoile' },
+  { key: 'tag',         Icon: Tag,         label: 'Tag' },
+];
+
+function IconPicker({ value, onChange }) {
+  const isImage = value && (value.startsWith('/uploads/') || value.startsWith('http'));
+  const [mode, setMode] = useState(isImage ? 'image' : 'icon');
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/admin/upload/icon', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) onChange(data.url);
+      else alert(data.error?.message || 'Erreur upload');
+    } catch { alert('Erreur lors de l\'upload'); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">Icône</label>
+
+      {/* Toggle mode */}
+      <div className="flex gap-1 mb-3 bg-gray-100 p-1 rounded-lg w-fit">
+        <button type="button" onClick={() => setMode('icon')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${mode === 'icon' ? 'bg-white shadow text-dva-blue' : 'text-gray-500 hover:text-gray-700'}`}>
+          Choisir une icône
+        </button>
+        <button type="button" onClick={() => setMode('image')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${mode === 'image' ? 'bg-white shadow text-dva-blue' : 'text-gray-500 hover:text-gray-700'}`}>
+          Télécharger une image
+        </button>
+      </div>
+
+      {mode === 'icon' ? (
+        <>
+          <div className="grid grid-cols-5 gap-2 max-h-44 overflow-y-auto pr-1">
+            {AVAILABLE_ICONS.map(({ key, Icon: Ic, label }) => (
+              <button key={key} type="button" title={label} onClick={() => onChange(key)}
+                className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all text-xs
+                  ${value === key
+                    ? 'border-dva-blue bg-dva-blue-muted text-dva-blue'
+                    : 'border-gray-200 hover:border-gray-400 text-gray-500 hover:text-gray-700'}`}>
+                <Ic className="w-5 h-5" />
+                <span className="truncate w-full text-center leading-tight">{label}</span>
+              </button>
+            ))}
+          </div>
+          {value && !isImage && (
+            <p className="text-xs text-dva-blue mt-1.5 font-medium">
+              Sélectionné : {AVAILABLE_ICONS.find(i => i.key === value)?.label || value}
+            </p>
+          )}
+        </>
+      ) : (
+        <div className="space-y-2">
+          <label className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploading ? 'border-dva-blue bg-dva-blue-muted' : 'border-gray-300 hover:border-dva-blue hover:bg-gray-50'}`}>
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={uploading} />
+            {uploading ? (
+              <p className="text-sm text-dva-blue">Envoi en cours…</p>
+            ) : isImage ? (
+              <div className="flex flex-col items-center gap-2">
+                <img src={value} alt="icône" className="h-12 w-12 object-contain rounded" />
+                <p className="text-xs text-gray-500">Cliquer pour changer</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-1 text-gray-400">
+                <Image className="w-8 h-8" />
+                <p className="text-sm">Cliquer pour choisir une image</p>
+                <p className="text-xs">JPG, PNG, SVG, WebP · max 2 Mo</p>
+              </div>
+            )}
+          </label>
+          {isImage && (
+            <button type="button" onClick={() => onChange('')}
+              className="text-xs text-dva-red hover:underline">
+              Supprimer l'image
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CatBrandModal({ item, type, onSave, onClose }) {
   const toast = useToast();
-  const [form, setForm] = useState(item || { name: '', slug: '', description: '', icon: '' });
+  const [form, setForm] = useState(item || { name: '', slug: '', description: '', icon: '', logo_url: '' });
   const [saving, setSaving] = useState(false);
 
   const autoSlug = (name) => name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1083,14 +1249,14 @@ function CatBrandModal({ item, type, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b flex-shrink-0">
           <h2 className="font-bold text-gray-800">
             {item?.id ? 'Modifier' : 'Nouveau'} {type === 'category' ? 'catégorie' : 'marque'}
           </h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-500" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+        <form onSubmit={handleSubmit} className="p-5 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
             <input className="input-dva" value={form.name} required
@@ -1106,11 +1272,30 @@ function CatBrandModal({ item, type, onSave, onClose }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <input className="input-dva" value={form.description || ''} onChange={(e) => f('description', e.target.value)} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Icône (lucide)</label>
-                <input className="input-dva" value={form.icon || ''} onChange={(e) => f('icon', e.target.value)} placeholder="ex: disc" />
-              </div>
+              <IconPicker value={form.icon || ''} onChange={(key) => f('icon', key)} />
             </>
+          )}
+          {type === 'brand' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">URL du logo (image .png/.jpg)</label>
+              <input
+                className="input-dva"
+                placeholder="https://exemple.com/logo-bosch.png"
+                value={form.logo_url || ''}
+                onChange={(e) => f('logo_url', e.target.value)}
+              />
+              {form.logo_url && (
+                <div className="mt-2 flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <img
+                    src={form.logo_url}
+                    alt="Aperçu logo"
+                    className="h-10 max-w-[120px] object-contain"
+                    onError={(e) => { e.target.src = ''; e.target.style.display = 'none'; }}
+                  />
+                  <span className="text-xs text-gray-500">Aperçu du logo</span>
+                </div>
+              )}
+            </div>
           )}
           <div className="flex gap-3 justify-end pt-2 border-t">
             <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">Annuler</button>
@@ -1122,24 +1307,56 @@ function CatBrandModal({ item, type, onSave, onClose }) {
   );
 }
 
+function DeleteCategoryModal({ categoryId, onClose, onDone }) {
+  const toast = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async (withProducts) => {
+    setLoading(true);
+    try {
+      if (withProducts) await adminApi.deleteCategoryWithProducts(categoryId);
+      else await adminApi.deleteCategory(categoryId);
+      toast.success(withProducts ? 'Catégorie et produits supprimés' : 'Catégorie supprimée');
+      onDone();
+    } catch (err) { toast.error(err.response?.data?.error?.message || 'Erreur'); setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+        <h3 className="font-bold text-gray-800 mb-2">Supprimer la catégorie</h3>
+        <p className="text-sm text-gray-600 mb-5">Que souhaitez-vous supprimer ?</p>
+        <div className="flex flex-col gap-3">
+          <button onClick={() => handleDelete(false)} disabled={loading}
+            className="w-full border border-dva-red text-dva-red px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50">
+            Supprimer la catégorie uniquement
+          </button>
+          <button onClick={() => handleDelete(true)} disabled={loading}
+            className="w-full bg-dva-red text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-dva-red-dark transition-colors disabled:opacity-50">
+            Supprimer la catégorie + tous ses produits
+          </button>
+          <button onClick={onClose} disabled={loading}
+            className="w-full text-gray-500 text-sm hover:text-gray-700 py-1">
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CategoriesTab() {
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
-  const [confirm, setConfirm] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
 
   const load = () => {
     setLoading(true);
     adminApi.getCategories().then((r) => setItems(r.data.categories)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
-
-  const handleDelete = async (id) => {
-    try { await adminApi.deleteCategory(id); toast.success('Catégorie supprimée'); load(); }
-    catch (err) { toast.error(err.response?.data?.error?.message || 'Erreur'); }
-    setConfirm(null);
-  };
 
   return (
     <div>
@@ -1158,26 +1375,35 @@ function CategoriesTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {items.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs hidden sm:table-cell">{c.slug}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell max-w-xs truncate">{c.description || '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => setModal(c)} className="p-1.5 text-gray-500 hover:text-dva-blue hover:bg-dva-blue-muted rounded-lg"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => setConfirm(c.id)} className="p-1.5 text-gray-500 hover:text-dva-red hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {items.map((c) => {
+                const iconEntry = AVAILABLE_ICONS.find(i => i.key === c.icon);
+                const IconComp = iconEntry?.Icon;
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-800">
+                      <div className="flex items-center gap-2">
+                        {IconComp && <span className="w-7 h-7 rounded-full bg-dva-blue-muted flex items-center justify-center flex-shrink-0"><IconComp className="w-4 h-4 text-dva-blue" /></span>}
+                        {c.name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs hidden sm:table-cell">{c.slug}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell max-w-xs truncate">{c.description || '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setModal(c)} className="p-1.5 text-gray-500 hover:text-dva-blue hover:bg-dva-blue-muted rounded-lg"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => setDeleteId(c.id)} className="p-1.5 text-gray-500 hover:text-dva-red hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {items.length === 0 && <p className="text-center text-gray-400 py-10">Aucune catégorie</p>}
         </div>
       )}
       {modal && <CatBrandModal item={modal === 'create' ? null : modal} type="category" onSave={() => { setModal(null); load(); }} onClose={() => setModal(null)} />}
-      {confirm && <ConfirmModal message="Supprimer cette catégorie ?" onConfirm={() => handleDelete(confirm)} onCancel={() => setConfirm(null)} />}
+      {deleteId && <DeleteCategoryModal categoryId={deleteId} onClose={() => setDeleteId(null)} onDone={() => { setDeleteId(null); load(); }} />}
     </div>
   );
 }
@@ -1211,6 +1437,7 @@ function BrandsTab() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Logo</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nom</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Slug</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
@@ -1219,6 +1446,12 @@ function BrandsTab() {
             <tbody className="divide-y divide-gray-100">
               {items.map((b) => (
                 <tr key={b.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    {b.logo_url
+                      ? <img src={b.logo_url} alt={b.name} className="h-8 max-w-[80px] object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+                      : <span className="text-xs text-gray-400 italic">Aucun</span>
+                    }
+                  </td>
                   <td className="px-4 py-3 font-medium text-gray-800">{b.name}</td>
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs hidden sm:table-cell">{b.slug}</td>
                   <td className="px-4 py-3 text-right">
@@ -1240,6 +1473,564 @@ function BrandsTab() {
   );
 }
 
+// ─── Footer Tab ───────────────────────────────────────────────────────────────
+
+function FooterTab() {
+  const toast = useToast();
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    adminApi.getFooterSettings().then((r) => {
+      const f = r.data.footer;
+      setForm({
+        logo_url: f.logo_url || '',
+        description: f.description || '',
+        phone: f.phone || '',
+        email: f.email || '',
+        address: f.address || '',
+        copyright: f.copyright || '',
+        badges: f.badges || [
+          { title: '', desc: '' }, { title: '', desc: '' },
+          { title: '', desc: '' }, { title: '', desc: '' },
+        ],
+      });
+    }).catch(() => {});
+  }, []);
+
+  const f = (field, value) => setForm((p) => ({ ...p, [field]: value }));
+  const fb = (i, field, value) => setForm((p) => {
+    const badges = [...p.badges];
+    badges[i] = { ...badges[i], [field]: value };
+    return { ...p, badges };
+  });
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await adminApi.updateFooterSettings(form);
+      toast.success('Footer mis à jour');
+    } catch { toast.error('Erreur'); }
+    finally { setSaving(false); }
+  };
+
+  if (!form) return <div className="flex justify-center py-10"><Spinner /></div>;
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-white rounded-xl shadow-card p-5 space-y-4">
+        <h3 className="font-bold text-gray-800">Informations générales</h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Logo du footer (URL image)</label>
+          <input
+            className="input-dva"
+            placeholder="https://exemple.com/logo.png  (laisser vide = logo par défaut)"
+            value={form.logo_url}
+            onChange={(e) => f('logo_url', e.target.value)}
+          />
+          {form.logo_url && (
+            <div className="mt-2 flex items-center gap-3 p-3 bg-dva-blue rounded-lg">
+              <img src={form.logo_url} alt="Aperçu logo" className="h-10 max-w-[140px] object-contain"
+                onError={(e) => { e.target.style.opacity = '0.3'; }} />
+              <span className="text-xs text-white/70">Aperçu sur fond bleu</span>
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea className="input-dva resize-none" rows={2} value={form.description} onChange={(e) => f('description', e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+            <input className="input-dva" value={form.phone} onChange={(e) => f('phone', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input className="input-dva" type="email" value={form.email} onChange={(e) => f('email', e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
+          <input className="input-dva" value={form.address} onChange={(e) => f('address', e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Mention copyright</label>
+          <input className="input-dva" value={form.copyright} onChange={(e) => f('copyright', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-card p-5 space-y-4">
+        <h3 className="font-bold text-gray-800">Badges de réassurance (4 blocs)</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {form.badges.map((badge, i) => (
+            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Bloc {i + 1}</p>
+              <input className="input-dva text-sm" placeholder="Titre" value={badge.title}
+                onChange={(e) => fb(i, 'title', e.target.value)} />
+              <input className="input-dva text-sm" placeholder="Sous-titre" value={badge.desc}
+                onChange={(e) => fb(i, 'desc', e.target.value)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Button onClick={handleSave} loading={saving}>Enregistrer le footer</Button>
+    </div>
+  );
+}
+
+// ─── Bannière Hero ─────────────────────────────────────────────────────────────
+
+const PRESET_GRADIENTS = [
+  { label: 'Bleu DVA',    value: 'linear-gradient(135deg, #003DA5, #002880)' },
+  { label: 'Nuit bleue',  value: 'linear-gradient(135deg, #111827, #002880)' },
+  { label: 'Bleu ardoise',value: 'linear-gradient(135deg, #002880, #1e293b)' },
+  { label: 'Rouge DVA',   value: 'linear-gradient(135deg, #E31E24, #002880)' },
+  { label: 'Bleu clair',  value: 'linear-gradient(135deg, #0052CC, #002880)' },
+  { label: 'Gris foncé',  value: 'linear-gradient(135deg, #1f2937, #111827)' },
+];
+
+function SlideModal({ slide, onSave, onClose }) {
+  const [form, setForm] = useState(slide || {
+    title: '', subtitle: '', badge: '', cta: 'Découvrir', link: '/catalogue', bg: PRESET_GRADIENTS[0].value,
+  });
+  const f = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b flex-shrink-0">
+          <h2 className="font-bold text-gray-800">{slide ? 'Modifier le slide' : 'Nouveau slide'}</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="p-5 space-y-3 overflow-y-auto flex-1">
+          {/* Aperçu */}
+          <div className="rounded-xl p-5 text-white relative overflow-hidden" style={{ background: form.bg, minHeight: 100 }}>
+            <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-10">
+              <svg viewBox="0 0 200 150" fill="none" className="w-full h-full">
+                <circle cx="150" cy="75" r="100" stroke="white" strokeWidth="1.5" />
+                <circle cx="150" cy="75" r="60" stroke="white" strokeWidth="1.5" />
+              </svg>
+            </div>
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-dva-red" />
+            <div className="relative z-10">
+              {form.badge && <span className="inline-block bg-dva-red text-white text-xs font-bold px-2 py-0.5 rounded-full mb-2">{form.badge}</span>}
+              <p className="font-black text-lg leading-tight">{form.title || 'Titre du slide'}</p>
+              <p className="text-blue-200 text-sm mt-1">{form.subtitle || 'Sous-titre'}</p>
+              <span className="inline-block mt-3 bg-dva-red text-white text-xs font-bold px-3 py-1 rounded">{form.cta || 'CTA'}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
+            <input className="input-dva" value={form.title} onChange={(e) => f('title', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sous-titre</label>
+            <input className="input-dva" value={form.subtitle} onChange={(e) => f('subtitle', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Badge (ex: -25%)</label>
+              <input className="input-dva" value={form.badge} onChange={(e) => f('badge', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Texte bouton</label>
+              <input className="input-dva" value={form.cta} onChange={(e) => f('cta', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Lien du bouton</label>
+            <input className="input-dva font-mono text-sm" value={form.link} placeholder="/catalogue?category=freins" onChange={(e) => f('link', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Couleur de fond</label>
+            <div className="grid grid-cols-3 gap-2">
+              {PRESET_GRADIENTS.map((g) => (
+                <button key={g.value} type="button" onClick={() => f('bg', g.value)}
+                  className={`flex items-center gap-2 p-2 rounded-lg border-2 text-xs transition-all ${form.bg === g.value ? 'border-dva-blue' : 'border-gray-200 hover:border-gray-400'}`}>
+                  <span className="w-5 h-5 rounded flex-shrink-0" style={{ background: g.value }} />
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end p-5 border-t flex-shrink-0">
+          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">Annuler</button>
+          <Button onClick={() => { if (form.title) onSave(form); }}>{slide ? 'Enregistrer' : 'Ajouter'}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_HERO_SLIDES = [
+  { id: 1, title: 'Pièces de Frein de Qualité', subtitle: 'Plaquettes, disques, étriers — Marques Brembo, Bosch, EBC', cta: 'Voir les freins', link: '/catalogue?category=freins', bg: 'linear-gradient(135deg, #003DA5, #002880)', badge: "Jusqu'à -25%" },
+  { id: 2, title: 'Pneus Toutes Saisons', subtitle: 'Michelin, Continental, Bridgestone — Livraison express', cta: 'Choisir mes pneus', link: '/catalogue?category=pneus', bg: 'linear-gradient(135deg, #111827, #002880)', badge: 'Meilleur prix' },
+  { id: 3, title: 'Huiles & Filtres Premium', subtitle: 'Castrol, Total, Mann Filter — Compatibilité garantie', cta: 'Découvrir', link: '/catalogue?category=filtres', bg: 'linear-gradient(135deg, #002880, #1e293b)', badge: 'Nouveauté' },
+];
+
+function BanniereTab() {
+  const toast = useToast();
+  const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null); // null | 'create' | slide object
+
+  useEffect(() => {
+    adminApi.getHeroSlides()
+      .then((r) => {
+        const loaded = r.data.slides || [];
+        // Si vide en BDD, pré-remplir avec les slides par défaut et les sauvegarder
+        if (loaded.length === 0) {
+          setSlides(DEFAULT_HERO_SLIDES);
+          adminApi.updateHeroSlides(DEFAULT_HERO_SLIDES).catch(() => {});
+        } else {
+          setSlides(loaded);
+        }
+      })
+      .catch(() => { toast.error('Erreur de chargement'); setSlides(DEFAULT_HERO_SLIDES); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async (updatedSlides) => {
+    setSaving(true);
+    try {
+      await adminApi.updateHeroSlides(updatedSlides);
+      setSlides(updatedSlides);
+      toast.success('Bannière mise à jour');
+    } catch { toast.error('Erreur'); }
+    finally { setSaving(false); }
+  };
+
+  const handleSave = (form) => {
+    let updated;
+    if (modal === 'create') {
+      updated = [...slides, { ...form, id: Date.now() }];
+    } else {
+      updated = slides.map((s) => (s.id === modal.id ? { ...s, ...form } : s));
+    }
+    save(updated);
+    setModal(null);
+  };
+
+  const handleDelete = (id) => {
+    save(slides.filter((s) => s.id !== id));
+  };
+
+  const move = (idx, dir) => {
+    const arr = [...slides];
+    const to = idx + dir;
+    if (to < 0 || to >= arr.length) return;
+    [arr[idx], arr[to]] = [arr[to], arr[idx]];
+    save(arr);
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
+
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button size="sm" onClick={() => setModal('create')}><Plus className="w-4 h-4" /> Nouveau slide</Button>
+      </div>
+
+      <div className="space-y-3">
+        {slides.map((slide, i) => (
+          <div key={slide.id} className="bg-white rounded-xl shadow-card overflow-hidden flex gap-0">
+            {/* Aperçu couleur */}
+            <div className="w-3 flex-shrink-0" style={{ background: slide.bg }} />
+            <div className="flex-1 p-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-800 truncate">{slide.title}</p>
+                <p className="text-xs text-gray-500 truncate">{slide.subtitle}</p>
+                {slide.badge && <span className="inline-block mt-1 bg-dva-red text-white text-xs px-2 py-0.5 rounded-full">{slide.badge}</span>}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Monter">▲</button>
+                <button onClick={() => move(i, 1)} disabled={i === slides.length - 1} className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Descendre">▼</button>
+                <button onClick={() => setModal(slide)} className="p-1.5 text-gray-500 hover:text-dva-blue hover:bg-dva-blue-muted rounded-lg"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(slide.id)} className="p-1.5 text-gray-500 hover:text-dva-red hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {slides.length === 0 && (
+          <div className="bg-white rounded-xl shadow-card p-10 text-center text-gray-400">
+            Aucun slide — cliquez sur "Nouveau slide" pour commencer
+          </div>
+        )}
+      </div>
+
+      {saving && <p className="text-sm text-dva-blue mt-3">Enregistrement…</p>}
+      {modal && <SlideModal slide={modal === 'create' ? null : modal} onSave={handleSave} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+// ─── Pages informations ────────────────────────────────────────────────────
+
+const PAGE_LABELS = {
+  'qui-sommes-nous':          'Qui sommes-nous ?',
+  'livraison-retours':        'Livraison & retours',
+  'mentions-legales':         'Mentions légales',
+  'cgv':                      'CGV',
+  'politique-confidentialite': 'Politique de confidentialité',
+};
+
+function PagesTab() {
+  const toast = useToast();
+  const [pages, setPages]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null); // page en cours d'édition
+  const [saving, setSaving]     = useState(false);
+  const [title, setTitle]       = useState('');
+  const [content, setContent]   = useState('');
+  const [preview, setPreview]   = useState(false);
+
+  useEffect(() => {
+    adminApi.getPages()
+      .then((r) => {
+        const list = r.data.pages || [];
+        setPages(list);
+        if (list.length) selectPage(list[0]);
+      })
+      .catch(() => toast.error('Impossible de charger les pages'))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function selectPage(p) {
+    setSelected(p);
+    setTitle(p.title);
+    setContent(p.content || '');
+    setPreview(false);
+  }
+
+  async function handleSave() {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      const r = await adminApi.updatePage(selected.slug, { title, content });
+      const updated = r.data.page;
+      setPages((prev) => prev.map((p) => p.slug === updated.slug ? updated : p));
+      setSelected(updated);
+      toast.success('Page enregistrée');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Rendu basique du contenu pour la prévisualisation
+  function renderPreview(text) {
+    if (!text) return <p className="text-gray-400 italic">Aucun contenu</p>;
+    const blocks = text.split(/\n\n+/);
+    return blocks.map((block, bi) => {
+      const lines = block.split('\n').filter(Boolean);
+      if (!lines.length) return null;
+      if (lines[0].startsWith('## ')) {
+        return (
+          <div key={bi}>
+            <h3 className="text-base font-bold text-dva-blue mt-5 mb-2 first:mt-0 pb-1 border-b border-dva-blue/20">{lines[0].slice(3)}</h3>
+            {lines.slice(1).map((l, i) =>
+              l.startsWith('- ')
+                ? <p key={i} className="text-sm text-gray-600 pl-3 before:content-['•'] before:mr-2 before:text-dva-red">{l.slice(2)}</p>
+                : <p key={i} className="text-sm text-gray-600 leading-relaxed my-1">{l}</p>
+            )}
+          </div>
+        );
+      }
+      if (lines.every((l) => l.startsWith('- '))) {
+        return (
+          <ul key={bi} className="space-y-1 my-2">
+            {lines.map((l, i) => <li key={i} className="text-sm text-gray-600 pl-3 before:content-['•'] before:mr-2 before:text-dva-red">{l.slice(2)}</li>)}
+          </ul>
+        );
+      }
+      return <p key={bi} className="text-sm text-gray-600 leading-relaxed my-2">{lines.join(' ')}</p>;
+    });
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Spinner size="lg" /></div>;
+
+  return (
+    <div className="flex gap-6 min-h-[70vh]">
+      {/* ── Liste des pages ── */}
+      <div className="w-52 flex-shrink-0 space-y-1">
+        {pages.map((p) => (
+          <button key={p.slug} onClick={() => selectPage(p)}
+            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              selected?.slug === p.slug
+                ? 'bg-dva-blue text-white shadow'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}>
+            {PAGE_LABELS[p.slug] || p.title}
+          </button>
+        ))}
+        {pages.length === 0 && (
+          <p className="text-sm text-gray-400 px-2">Aucune page</p>
+        )}
+      </div>
+
+      {/* ── Éditeur ── */}
+      {selected && (
+        <div className="flex-1 min-w-0">
+          {/* En-tête éditeur */}
+          <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+            <h2 className="font-bold text-gray-800 text-lg">{PAGE_LABELS[selected.slug] || selected.title}</h2>
+            <div className="flex items-center gap-2">
+              <a href={`/informations/${selected.slug}`} target="_blank" rel="noreferrer"
+                className="text-xs text-dva-blue hover:underline border border-dva-blue/30 px-3 py-1.5 rounded-lg">
+                Voir la page →
+              </a>
+              <button onClick={() => setPreview((v) => !v)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  preview ? 'bg-dva-blue text-white border-dva-blue' : 'text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}>
+                {preview ? 'Éditer' : 'Aperçu'}
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="btn-primary text-sm px-4 py-1.5 disabled:opacity-60">
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+
+          {/* Champ titre */}
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Titre de la page</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-dva-blue/40"
+              placeholder="Titre de la page" />
+          </div>
+
+          {!preview ? (
+            /* ── Zone d'édition ── */
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Contenu
+                <span className="ml-2 font-normal normal-case text-gray-400">
+                  — <code className="bg-gray-100 px-1 rounded">## Titre</code> pour les titres,
+                  <code className="bg-gray-100 px-1 rounded mx-1">- élément</code> pour les listes,
+                  <code className="bg-gray-100 px-1 rounded">**gras**</code> pour le gras
+                </span>
+              </label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={22}
+                className="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-dva-blue/40 resize-y"
+                placeholder={`## Titre de section\n\nParagraphe de texte...\n\n- Point 1\n- Point 2`}
+              />
+            </div>
+          ) : (
+            /* ── Aperçu ── */
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Aperçu</label>
+              <div className="border border-gray-200 rounded-lg p-6 bg-white min-h-[400px]">
+                <h1 className="text-xl font-black text-dva-blue mb-4">{title}</h1>
+                <div>{renderPreview(content)}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Aide format */}
+          <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <p className="text-xs font-semibold text-dva-blue mb-2">Guide de formatage</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-600">
+              <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                <p className="font-mono text-dva-blue mb-1">## Titre de section</p>
+                <p className="text-gray-500">Crée un titre de section en bleu</p>
+              </div>
+              <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                <p className="font-mono text-dva-blue mb-1">- Élément de liste</p>
+                <p className="text-gray-500">Crée une liste à puces</p>
+              </div>
+              <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                <p className="font-mono text-dva-blue mb-1">**texte important**</p>
+                <p className="text-gray-500">Met le texte en gras</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Onglet Paiements ──────────────────────────────────────────────────────
+
+function PaymentsTab() {
+  const toast = useToast();
+  const [form, setForm] = useState({ wave_number: '', orange_money_number: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    adminApi.getPaymentSettings().then((r) => {
+      setForm({ wave_number: r.data.payment.wave_number || '', orange_money_number: r.data.payment.orange_money_number || '' });
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await adminApi.updatePaymentSettings(form);
+      toast.success('Numéros de paiement enregistrés');
+    } catch { toast.error('Erreur lors de la sauvegarde'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <div className="bg-white rounded-xl shadow-card p-5 space-y-5">
+        <h3 className="font-bold text-gray-800">Numéros de réception des paiements</h3>
+        <p className="text-sm text-gray-500">
+          Ces numéros seront affichés aux clients lors du paiement mobile (Wave / Orange Money).
+        </p>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            <span className="inline-flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-blue-400" /> Numéro Wave</span>
+          </label>
+          <input
+            className="input-dva"
+            type="tel"
+            placeholder="+221 77 000 00 00"
+            value={form.wave_number}
+            onChange={(e) => setForm((p) => ({ ...p, wave_number: e.target.value }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            <span className="inline-flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-orange-500" /> Numéro Orange Money</span>
+          </label>
+          <input
+            className="input-dva"
+            type="tel"
+            placeholder="+221 77 000 00 00"
+            value={form.orange_money_number}
+            onChange={(e) => setForm((p) => ({ ...p, orange_money_number: e.target.value }))}
+          />
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+          Ces numéros apparaîtront dans la page de paiement avec le message :<br />
+          <span className="font-medium">« Envoyez [montant] au [numéro] »</span>
+        </div>
+      </div>
+
+      <Button onClick={handleSave} loading={saving}>Enregistrer les numéros</Button>
+    </div>
+  );
+}
+
 // ─── Page principale Admin ─────────────────────────────────────────────────
 
 const TABS = [
@@ -1251,6 +2042,10 @@ const TABS = [
   { id: 'brands',      label: 'Marques',      icon: Award },
   { id: 'reviews',     label: 'Avis',         icon: Star },
   { id: 'promotions',  label: 'Promotions',   icon: Tag },
+  { id: 'banniere',    label: 'Bannière',     icon: Image },
+  { id: 'pages',       label: 'Pages info',   icon: Bolt },
+  { id: 'footer',      label: 'Footer',       icon: Settings },
+  { id: 'paiements',   label: 'Paiements',    icon: Smartphone },
 ];
 
 function AdminContent() {
@@ -1262,11 +2057,8 @@ function AdminContent() {
       <div className="min-h-screen bg-gray-50">
         <div className="bg-dva-blue text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-1">
-              <div className="bg-white rounded px-1.5 py-0.5">
-                <span className="text-dva-blue font-black text-base">D</span>
-                <span className="text-dva-red font-black text-base">VA</span>
-              </div>
+            <a href="/">
+              <img src="lago_bi.png" alt="DVA" className="h-10 w-auto object-contain" />
             </a>
             <span className="text-white font-semibold text-lg">Administration</span>
           </div>
@@ -1300,6 +2092,10 @@ function AdminContent() {
             {activeTab === 'brands'      && <BrandsTab />}
             {activeTab === 'reviews'     && <ReviewsTab />}
             {activeTab === 'promotions'  && <PromotionsTab />}
+            {activeTab === 'banniere'    && <BanniereTab />}
+            {activeTab === 'pages'       && <PagesTab />}
+            {activeTab === 'footer'      && <FooterTab />}
+            {activeTab === 'paiements'   && <PaymentsTab />}
           </main>
         </div>
       </div>

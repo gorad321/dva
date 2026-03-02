@@ -33,10 +33,14 @@ async function initDatabase() {
 
   // Vérifier si la BDD est vide, et peupler si nécessaire
   const count = db.prepare('SELECT COUNT(*) as c FROM products').get();
+  const { seedDatabase, seedPages } = require('./seed');
   if (count.c === 0) {
-    const { seedDatabase } = require('./seed');
     seedDatabase(db);
     console.log('✅ Base de données peuplée avec les données d\'exemple');
+  } else {
+    // Seed des pages si absent (nouvelle fonctionnalité sur BDD existante)
+    const pagesCount = db.prepare('SELECT COUNT(*) as c FROM pages').get();
+    if (pagesCount.c === 0) seedPages(db);
   }
 
   console.log('✅ Base de données SQLite initialisée :', dbPath);
@@ -227,6 +231,21 @@ function createTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_promotions_code   ON promotions(code);
     CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(is_active, expires_at);
+
+    -- ─── Pages informations (Mentions légales, CGV, etc.) ────────────────────
+    CREATE TABLE IF NOT EXISTS pages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug       TEXT UNIQUE NOT NULL,
+      title      TEXT NOT NULL,
+      content    TEXT NOT NULL DEFAULT '',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- ─── Paramètres du site ───────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 }
 
@@ -245,6 +264,35 @@ function runMigrations() {
   try {
     db.exec("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)");
   } catch {}
+
+  // Créer la table pages si elle n'existe pas (BDD existante sans cette table)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug       TEXT UNIQUE NOT NULL,
+      title      TEXT NOT NULL,
+      content    TEXT NOT NULL DEFAULT '',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Ajouter colonne payment_token si elle n'existe pas encore (intégration PayTech)
+  const orderCols = db.prepare('PRAGMA table_info(orders)').all();
+  const hasPaymentToken = orderCols.some((c) => c.name === 'payment_token');
+  if (!hasPaymentToken) {
+    db.exec('ALTER TABLE orders ADD COLUMN payment_token TEXT');
+    try {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_orders_payment_token ON orders(payment_token)');
+    } catch {}
+    console.log('✅ Migration : colonne payment_token ajoutée à orders');
+  }
+
+  // Ajouter colonne logo_url sur brands (pour le bandeau défilant)
+  const brandCols = db.prepare('PRAGMA table_info(brands)').all();
+  if (!brandCols.some((c) => c.name === 'logo_url')) {
+    db.exec('ALTER TABLE brands ADD COLUMN logo_url TEXT');
+    console.log('✅ Migration : colonne logo_url ajoutée à brands');
+  }
 }
 
 module.exports = { getDb, initDatabase };

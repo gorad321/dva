@@ -197,7 +197,7 @@ function getBrands(req, res, next) {
     const brands = db.prepare(`
       SELECT b.*, COUNT(p.id) AS product_count
       FROM brands b
-      LEFT JOIN products p ON p.brand_id = b.id
+      INNER JOIN products p ON p.brand_id = b.id AND p.stock > 0
       GROUP BY b.id
       ORDER BY b.name ASC
     `).all();

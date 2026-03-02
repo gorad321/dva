@@ -28,9 +28,10 @@ axiosClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Si 401 et pas déjà en train de rafraîchir, et pas sur /auth/refresh lui-même
+    const code = error.response?.data?.error?.code;
     if (
       error.response?.status === 401 &&
-      error.response?.data?.error?.code === 'TOKEN_EXPIRED' &&
+      (code === 'TOKEN_EXPIRED' || code === 'UNAUTHORIZED') &&
       !originalRequest._retry &&
       !originalRequest.url.includes('/auth/refresh')
     ) {

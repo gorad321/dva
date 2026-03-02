@@ -1,11 +1,34 @@
 /**
  * DVA - Routes Admin (protégées par requireAdmin)
  */
+const path = require('path');
+const fs = require('fs');
 const { Router } = require('express');
 const { body, query } = require('express-validator');
+const multer = require('multer');
 const { handleValidation } = require('../middleware/validate');
 const { requireAdmin } = require('../middleware/auth');
 const ctrl = require('../controllers/adminController');
+
+// ─── Multer : upload images icônes catégories ─────────────────────────────────
+const uploadDir = path.join(__dirname, '../../public/uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `icon_${Date.now()}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 Mo max
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|svg\+xml|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Seules les images sont acceptées (jpg, png, svg, webp)'));
+  },
+});
 
 const router = Router();
 
@@ -24,7 +47,6 @@ router.post('/products', [
   body('price').isFloat({ min: 0 }).withMessage('Prix invalide'),
   body('stock').isInt({ min: 0 }).withMessage('Stock invalide'),
   body('category_id').isInt({ min: 1 }).withMessage('Catégorie requise'),
-  body('brand_id').isInt({ min: 1 }).withMessage('Marque requise'),
   handleValidation,
 ], ctrl.createProduct);
 
@@ -34,7 +56,6 @@ router.put('/products/:id', [
   body('price').isFloat({ min: 0 }),
   body('stock').isInt({ min: 0 }),
   body('category_id').isInt({ min: 1 }),
-  body('brand_id').isInt({ min: 1 }),
   handleValidation,
 ], ctrl.updateProduct);
 
@@ -101,11 +122,13 @@ router.delete('/categories/:id', ctrl.deleteCategory);
 router.post('/brands', [
   body('name').trim().notEmpty().withMessage('Nom requis'),
   body('slug').trim().notEmpty().matches(/^[a-z0-9-]+$/).withMessage('Slug invalide'),
+  body('logo_url').optional({ checkFalsy: true }).trim(),
   handleValidation,
 ], ctrl.createBrand);
 router.put('/brands/:id', [
   body('name').trim().notEmpty(),
   body('slug').trim().notEmpty().matches(/^[a-z0-9-]+$/),
+  body('logo_url').optional({ checkFalsy: true }).trim(),
   handleValidation,
 ], ctrl.updateBrand);
 router.delete('/brands/:id', ctrl.deleteBrand);
@@ -114,5 +137,33 @@ router.delete('/brands/:id', ctrl.deleteBrand);
 router.get('/export/products', ctrl.exportProducts);
 router.get('/export/orders', ctrl.exportOrders);
 router.get('/export/users', ctrl.exportUsers);
+
+// ─── Pages informations ──────────────────────────────────────────────────────
+router.get('/pages', ctrl.getAdminPages);
+router.put('/pages/:slug', [
+  body('title').trim().notEmpty().withMessage('Titre requis'),
+  body('content').trim().notEmpty().withMessage('Contenu requis'),
+  handleValidation,
+], ctrl.updatePage);
+
+// ─── Paramètres Footer ────────────────────────────────────────────────────────
+router.get('/settings/footer', ctrl.getFooterSettings);
+router.put('/settings/footer', ctrl.updateFooterSettings);
+
+// ─── Paramètres Paiement ──────────────────────────────────────────────────────
+router.get('/settings/payment', ctrl.getPaymentSettings);
+router.put('/settings/payment', ctrl.updatePaymentSettings);
+
+// ─── Slides bannière hero ─────────────────────────────────────────────────────
+router.get('/settings/hero', ctrl.getHeroSlides);
+router.put('/settings/hero', ctrl.updateHeroSlides);
+
+// ─── Upload image icône ────────────────────────────────────────────────────────
+router.post('/upload/icon', upload.single('image'), (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: { message: 'Aucun fichier reçu' } });
+    res.json({ url: `/uploads/${req.file.filename}` });
+  } catch (err) { next(err); }
+});
 
 module.exports = router;

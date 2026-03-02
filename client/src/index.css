@@ -94,7 +94,129 @@
   }
 }
 
-/* Scrollbar personnalisée */
+/* ── Transitions de pages ──────────────────────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: fadeSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ── Effets produits ───────────────────────────────────────────────────────── */
+
+/* Card : lever + ombre au survol */
+.product-card {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.28s ease !important;
+}
+.product-card:hover {
+  transform: translateY(-6px);
+}
+
+/* Image : zoom au survol */
+.product-img-wrap {
+  overflow: hidden;
+}
+.product-img-wrap img,
+.product-img-wrap .lazy-img {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.product-card:hover .product-img-wrap img,
+.product-card:hover .product-img-wrap .lazy-img {
+  transform: scale(1.08);
+}
+
+/* Badge promo : pulsation douce */
+.badge-promo {
+  animation: badge-pulse 2.5s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.08); }
+}
+
+/* Bouton panier : bounce au clic */
+@keyframes cart-bounce {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.35); }
+  65%  { transform: scale(0.88); }
+  100% { transform: scale(1); }
+}
+.cart-btn-bounce {
+  animation: cart-bounce 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Overlay "Voir le produit" au survol de la card */
+.product-overlay {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.product-card:hover .product-overlay {
+  opacity: 1;
+}
+
+/* ── Bandeau marques défilant ──────────────────────────────────────────────── */
+@keyframes marquee-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.brand-scroll-container {
+  overflow: hidden;
+  position: relative;
+}
+
+/* Piste : largeur max-content pour tenir tous les logos côte à côte */
+.brand-scroll-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  animation: marquee-scroll 28s linear infinite;
+}
+
+/* Pause au survol */
+.brand-scroll-container:hover .brand-scroll-track {
+  animation-play-state: paused;
+}
+
+/* Logos en niveaux de gris, colorés au survol */
+.brand-logo-img {
+  filter: grayscale(100%) opacity(0.55);
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+.brand-scroll-item:hover .brand-logo-img {
+  filter: grayscale(0%) opacity(1);
+  transform: scale(1.1);
+}
+
+/* Noms texte (fallback) */
+.brand-logo-text {
+  transition: color 0.25s ease;
+}
+.brand-scroll-item:hover .brand-logo-text {
+  color: #003DA5;
+}
+
+/* Fondu gauche/droite pour un effet propre */
+.brand-scroll-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  z-index: 2;
+  pointer-events: none;
+}
+.brand-scroll-fade-left {
+  left: 0;
+  background: linear-gradient(to right, white, transparent);
+}
+.brand-scroll-fade-right {
+  right: 0;
+  background: linear-gradient(to left, white, transparent);
+}
+
+/* ── Scrollbar personnalisée ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { background: #003DA5; border-radius: 3px; }
