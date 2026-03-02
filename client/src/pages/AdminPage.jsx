@@ -2092,8 +2092,25 @@ function AdminContent() {
           <a href="/" className="text-blue-200 hover:text-white text-sm">← Retour au site</a>
         </div>
 
+        {/* Navigation mobile — barre horizontale scrollable */}
+        <div className="md:hidden bg-white border-b border-gray-200 overflow-x-auto">
+          <div className="flex whitespace-nowrap">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors flex-shrink-0 ${
+                  activeTab === id
+                    ? 'border-dva-blue text-dva-blue'
+                    : 'border-transparent text-gray-600'
+                }`}>
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex">
-          <aside className="w-52 flex-shrink-0 min-h-screen bg-white border-r border-gray-200 pt-4">
+          <aside className="hidden md:block w-52 flex-shrink-0 min-h-screen bg-white border-r border-gray-200 pt-4">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => setActiveTab(id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors ${
@@ -2107,7 +2124,7 @@ function AdminContent() {
             ))}
           </aside>
 
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-4 md:p-6 overflow-auto">
             <h1 className="text-xl font-bold text-gray-900 mb-6">
               {TABS.find((t) => t.id === activeTab)?.label}
             </h1>
