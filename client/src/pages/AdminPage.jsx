@@ -2089,10 +2089,7 @@ function AdminContent() {
             </a>
             <span className="text-white font-semibold text-sm md:text-lg">Administration</span>
           </div>
-          <a href="/" className="text-blue-200 hover:text-white text-xs md:text-sm whitespace-nowrap">
-            <span className="md:hidden">← Site</span>
-            <span className="hidden md:inline">← Retour au site</span>
-          </a>
+          <a href="/" className="text-blue-200 hover:text-white text-xs md:text-sm whitespace-nowrap">← Retour</a>
         </div>
 
         {/* Navigation mobile — barre horizontale scrollable */}
