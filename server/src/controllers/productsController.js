@@ -1,7 +1,34 @@
 /**
  * DVA - Contrôleur produits, catégories, marques
+ * Optimisations : JOIN agrégés à la place des sous-requêtes corrélées (N+1 → 1 requête)
  */
 const { getDb } = require('../db/database');
+
+/**
+ * CTEs réutilisables pour image principale et notes moyennes
+ * Remplacement des sous-requêtes corrélées (N×2 requêtes → 2 agrégats)
+ */
+const IMAGE_CTE = `
+  pi AS (
+    SELECT product_id, url, alt_text
+    FROM product_images
+    WHERE rowid IN (
+      SELECT MIN(rowid) FROM product_images
+      GROUP BY product_id
+      HAVING MAX(is_primary) = is_primary
+    )
+  )
+`;
+
+const RATING_CTE = `
+  rv AS (
+    SELECT product_id,
+           AVG(rating)  AS avg_rating,
+           COUNT(*)     AS review_count
+    FROM reviews
+    GROUP BY product_id
+  )
+`;
 
 /**
  * GET /api/products
@@ -25,7 +52,6 @@ function getProducts(req, res, next) {
     const params = [];
     const conditions = [];
 
-    // Recherche texte (protection injection : paramètres liés)
     if (q) {
       conditions.push('(p.name LIKE ? OR p.short_description LIKE ?)');
       params.push(`%${q}%`, `%${q}%`);
@@ -43,29 +69,31 @@ function getProducts(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Tri sécurisé (liste blanche pour éviter injection)
     const sortMap = {
-      name_asc: 'p.name ASC',
-      name_desc: 'p.name DESC',
-      price_asc: 'p.price ASC',
+      name_asc:   'p.name ASC',
+      name_desc:  'p.name DESC',
+      price_asc:  'p.price ASC',
       price_desc: 'p.price DESC',
-      newest: 'p.created_at DESC',
+      newest:     'p.created_at DESC',
     };
     const orderBy = sortMap[sort] || 'p.name ASC';
 
-    // Requête avec paramètres liés (aucune interpolation)
+    // Une seule requête avec CTEs agrégées (image + notes) au lieu de 4N sous-requêtes
     const sql = `
+      WITH ${IMAGE_CTE}, ${RATING_CTE}
       SELECT p.id, p.name, p.slug, p.short_description, p.price, p.original_price,
              p.stock, p.is_featured, p.sku,
              c.name AS category_name, c.slug AS category_slug,
              b.name AS brand_name, b.slug AS brand_slug,
-             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url,
-             (SELECT alt_text FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_alt,
-             (SELECT AVG(rating) FROM reviews WHERE product_id = p.id) AS avg_rating,
-             (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count
+             pi.url      AS image_url,
+             pi.alt_text AS image_alt,
+             rv.avg_rating,
+             rv.review_count
       FROM products p
       JOIN categories c ON c.id = p.category_id
-      JOIN brands b ON b.id = p.brand_id
+      JOIN brands     b ON b.id = p.brand_id
+      LEFT JOIN pi ON pi.product_id = p.id
+      LEFT JOIN rv ON rv.product_id = p.id
       ${where}
       ORDER BY ${orderBy}
       LIMIT ? OFFSET ?
@@ -74,12 +102,11 @@ function getProducts(req, res, next) {
 
     const products = db.prepare(sql).all(...params);
 
-    // Total pour la pagination (mêmes filtres sans LIMIT/OFFSET)
     const countSql = `
       SELECT COUNT(*) AS total
       FROM products p
       JOIN categories c ON c.id = p.category_id
-      JOIN brands b ON b.id = p.brand_id
+      JOIN brands     b ON b.id = p.brand_id
       ${where}
     `;
     const countParams = params.slice(0, params.length - 2);
@@ -109,11 +136,13 @@ function getSearchSuggestions(req, res, next) {
 
     const db = getDb();
     const suggestions = db.prepare(`
+      WITH ${IMAGE_CTE}
       SELECT p.name, p.slug,
              c.name AS category,
-             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url
+             pi.url AS image_url
       FROM products p
       JOIN categories c ON c.id = p.category_id
+      LEFT JOIN pi ON pi.product_id = p.id
       WHERE p.name LIKE ?
       LIMIT 8
     `).all(`%${q}%`);
@@ -132,15 +161,18 @@ function getProductBySlug(req, res, next) {
     const db = getDb();
     const { slug } = req.params;
 
+    // Produit + notes en une seule requête (les images sont récupérées séparément car on veut toutes les images)
     const product = db.prepare(`
+      WITH ${RATING_CTE}
       SELECT p.*,
              c.name AS category_name, c.slug AS category_slug,
              b.name AS brand_name, b.slug AS brand_slug,
-             (SELECT AVG(rating) FROM reviews WHERE product_id = p.id) AS avg_rating,
-             (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count
+             rv.avg_rating,
+             rv.review_count
       FROM products p
       JOIN categories c ON c.id = p.category_id
-      JOIN brands b ON b.id = p.brand_id
+      JOIN brands     b ON b.id = p.brand_id
+      LEFT JOIN rv ON rv.product_id = p.id
       WHERE p.slug = ?
     `).get(slug);
 
@@ -150,17 +182,10 @@ function getProductBySlug(req, res, next) {
       });
     }
 
-    const images = db.prepare(
-      'SELECT * FROM product_images WHERE product_id = ? ORDER BY sort_order ASC'
-    ).all(product.id);
-
-    const specs = db.prepare(
-      'SELECT spec_key, spec_value FROM product_specs WHERE product_id = ?'
-    ).all(product.id);
-
-    const compatibility = db.prepare(
-      'SELECT make, model, year_from, year_to, engine FROM vehicle_compatibility WHERE product_id = ? ORDER BY make, model'
-    ).all(product.id);
+    // Récupérer images, specs et compatibilité en parallèle (3 requêtes simples et rapides)
+    const images        = db.prepare('SELECT * FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, sort_order ASC').all(product.id);
+    const specs         = db.prepare('SELECT spec_key, spec_value FROM product_specs WHERE product_id = ?').all(product.id);
+    const compatibility = db.prepare('SELECT make, model, year_from, year_to, engine FROM vehicle_compatibility WHERE product_id = ? ORDER BY make, model').all(product.id);
 
     return res.json({ product: { ...product, images, specs, compatibility } });
   } catch (err) {
@@ -215,14 +240,17 @@ function getFeaturedProducts(req, res, next) {
   try {
     const db = getDb();
     const products = db.prepare(`
+      WITH ${IMAGE_CTE}, ${RATING_CTE}
       SELECT p.id, p.name, p.slug, p.short_description, p.price, p.original_price,
              p.stock, c.name AS category_name, b.name AS brand_name,
-             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url,
-             (SELECT alt_text FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_alt,
-             (SELECT AVG(rating) FROM reviews WHERE product_id = p.id) AS avg_rating
+             pi.url      AS image_url,
+             pi.alt_text AS image_alt,
+             rv.avg_rating
       FROM products p
       JOIN categories c ON c.id = p.category_id
-      JOIN brands b ON b.id = p.brand_id
+      JOIN brands     b ON b.id = p.brand_id
+      LEFT JOIN pi ON pi.product_id = p.id
+      LEFT JOIN rv ON rv.product_id = p.id
       WHERE p.is_featured = 1
       LIMIT 8
     `).all();

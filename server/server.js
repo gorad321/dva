@@ -5,6 +5,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -31,6 +32,9 @@ const PORT = process.env.PORT || 5000;
 
 // ─── Trust proxy (Railway, Render, etc.) ──────────────────────────────────────
 app.set('trust proxy', 1);
+
+// ─── Compression gzip (réduit de 70-85% la taille des réponses JSON/HTML) ────
+app.use(compression());
 
 // ─── Sécurité HTTP (Helmet) ───────────────────────────────────────────────────
 app.use(
@@ -216,9 +220,24 @@ app.get('/api/health', (req, res) => {
 
 // ─── Frontend React (production uniquement) ───────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  const distPath = path.join(__dirname, '../client/dist');
+
+  // Assets avec hash (JS, CSS, images) → cache 1 an immuable
+  app.use('/assets', express.static(path.join(distPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+  }));
+
+  // Autres fichiers statiques (favicon, logo...) → cache 1 heure
+  app.use(express.static(distPath, {
+    maxAge: '1h',
+    index: false,
+  }));
+
+  // Toutes les routes React → index.html sans cache (SPA)
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 

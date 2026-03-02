@@ -6,13 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy toutes les requêtes /api vers le serveur Express
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },
-      // Proxy les images uploadées
       '/uploads': {
         target: 'http://localhost:5000',
         changeOrigin: true,
@@ -23,14 +21,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // Limite de taille par chunk (avertissement si dépassé)
+    chunkSizeWarningLimit: 500,
     rollupOptions: {
       output: {
-        // Découpage en chunks pour de meilleures performances
+        // Découpage en chunks : vendor (React), icons, http séparés du code app
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
-          icons: ['lucide-react'],
-          http: ['axios'],
+          icons:  ['lucide-react'],
+          http:   ['axios'],
         },
+        // Noms de fichiers avec hash pour cache long terme (immutable)
+        chunkFileNames:  'assets/[name]-[hash].js',
+        entryFileNames:  'assets/[name]-[hash].js',
+        assetFileNames:  'assets/[name]-[hash][extname]',
       },
     },
   },
