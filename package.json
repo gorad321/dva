@@ -8,8 +8,10 @@
     "dev:client": "cd client && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "seed": "cd server && npm run seed",
-    "build": "cd client && npm install && npm run build",
-    "start": "node --experimental-sqlite server/server.js"
+    "postinstall": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build:client",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && node --experimental-sqlite server.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
