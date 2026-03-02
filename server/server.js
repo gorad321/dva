@@ -29,6 +29,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ─── Trust proxy (Railway, Render, etc.) ──────────────────────────────────────
+app.set('trust proxy', 1);
+
 // ─── Sécurité HTTP (Helmet) ───────────────────────────────────────────────────
 app.use(
   helmet({
