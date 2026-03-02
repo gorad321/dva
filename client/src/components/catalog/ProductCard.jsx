@@ -3,13 +3,11 @@ import { Link } from 'react-router-dom';
 import { ShoppingCart, Star, Eye } from 'lucide-react';
 import LazyImage from '../common/LazyImage';
 import { useCart } from '../../contexts/CartContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../common/Toast';
 import { formatCFA } from '../../utils/currency';
 
 export default function ProductCard({ product }) {
   const { addItem } = useCart();
-  const { user } = useAuth();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [bouncing, setBouncing] = useState(false);
@@ -21,14 +19,18 @@ export default function ProductCard({ product }) {
 
   const handleAddToCart = async (e) => {
     e.preventDefault();
-    if (!user) {
-      toast.info('Connectez-vous pour ajouter au panier');
-      return;
-    }
     setAdding(true);
     setBouncing(true);
     try {
-      await addItem(product.id, 1);
+      await addItem(product.id, 1, {
+        name: product.name,
+        slug: product.slug,
+        price: product.price,
+        original_price: product.original_price,
+        stock: product.stock,
+        image_url: product.image_url,
+        brand_name: product.brand_name,
+      });
       toast.success(`"${product.name}" ajouté au panier`);
     } catch (err) {
       toast.error(err.response?.data?.error?.message || 'Erreur lors de l\'ajout');

@@ -2,14 +2,11 @@ import React, { useState } from 'react';
 import { ShoppingCart, Star, Check, AlertTriangle, Shield } from 'lucide-react';
 import Button from '../common/Button';
 import { useCart } from '../../contexts/CartContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../common/Toast';
-import { Link } from 'react-router-dom';
 import { formatCFA } from '../../utils/currency';
 
 export default function ProductInfo({ product }) {
   const { addItem } = useCart();
-  const { user } = useAuth();
   const toast = useToast();
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -18,10 +15,17 @@ export default function ProductInfo({ product }) {
   const discount = hasPromo ? Math.round((1 - product.price / product.original_price) * 100) : 0;
 
   const handleAdd = async () => {
-    if (!user) { toast.info('Connectez-vous pour ajouter au panier'); return; }
     setAdding(true);
     try {
-      await addItem(product.id, quantity);
+      await addItem(product.id, quantity, {
+        name: product.name,
+        slug: product.slug,
+        price: product.price,
+        original_price: product.original_price,
+        stock: product.stock,
+        image_url: product.image_url,
+        brand_name: product.brand_name,
+      });
       toast.success(`${quantity}x "${product.name}" ajouté au panier`);
     } catch (err) {
       toast.error(err.response?.data?.error?.message || 'Erreur lors de l\'ajout');
@@ -97,15 +101,9 @@ export default function ProductInfo({ product }) {
               className="px-3 py-2.5 text-gray-600 hover:bg-gray-50 font-bold text-lg leading-none">+</button>
           </div>
 
-          {user ? (
-            <Button onClick={handleAdd} loading={adding} size="lg" className="flex-1">
-              <ShoppingCart className="w-5 h-5" /> Ajouter au panier
-            </Button>
-          ) : (
-            <Link to="/connexion" className="btn-primary flex-1 text-center flex items-center justify-center gap-2">
-              <ShoppingCart className="w-5 h-5" /> Se connecter pour commander
-            </Link>
-          )}
+          <Button onClick={handleAdd} loading={adding} size="lg" className="flex-1">
+            <ShoppingCart className="w-5 h-5" /> Ajouter au panier
+          </Button>
         </div>
       )}
 

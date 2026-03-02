@@ -6,16 +6,13 @@ import CartItem from '../components/cart/CartItem';
 import OrderSummary from '../components/cart/OrderSummary';
 import { ToastProvider } from '../components/common/Toast';
 import { useCart } from '../contexts/CartContext';
-import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/common/Spinner';
 
 export default function CartPage() {
   const { items, total, loading } = useCart();
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleCheckout = () => {
-    if (!user) { navigate('/connexion'); return; }
     navigate('/commande');
   };
 

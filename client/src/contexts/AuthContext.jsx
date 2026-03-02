@@ -32,12 +32,14 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const res = await authApi.login({ email, password });
     setUser(res.data.user);
+    window.dispatchEvent(new CustomEvent('dva:auth:loggedin'));
     return res.data.user;
   }, []);
 
   const register = useCallback(async (data) => {
     const res = await authApi.register(data);
     setUser(res.data.user);
+    window.dispatchEvent(new CustomEvent('dva:auth:loggedin'));
     return res.data.user;
   }, []);
 

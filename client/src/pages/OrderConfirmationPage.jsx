@@ -14,13 +14,15 @@ export default function OrderConfirmationPage() {
 
   // PayTech redirige avec ?payment=success ou ?payment=cancelled
   const paymentParam = searchParams.get('payment');
+  // Token invité transmis dans l'URL pour accéder à la commande sans compte
+  const guestToken = searchParams.get('token');
 
   useEffect(() => {
-    ordersApi.getOrderById(id)
+    ordersApi.getOrderById(id, guestToken)
       .then((res) => setOrder(res.data.order))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, guestToken]);
 
   if (loading) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
 
@@ -139,6 +141,10 @@ export default function OrderConfirmationPage() {
           {isCancelled ? (
             <Link to="/panier" className="btn-primary flex items-center justify-center gap-2">
               Réessayer le paiement
+            </Link>
+          ) : guestToken ? (
+            <Link to="/inscription" className="btn-secondary flex items-center justify-center gap-2">
+              <Package className="w-4 h-4" /> Créer un compte pour suivre mes commandes
             </Link>
           ) : (
             <Link to="/mon-compte" className="btn-secondary flex items-center justify-center gap-2">

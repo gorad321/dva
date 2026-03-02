@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { CreditCard, Smartphone, Shield, ChevronRight, Truck, ExternalLink, CheckCircle, Copy, Check } from 'lucide-react';
+import { CreditCard, Smartphone, Shield, ChevronRight, Truck, ExternalLink, CheckCircle, Copy, Check, User, UserCheck, LogIn } from 'lucide-react';
 import SEOMeta from '../components/common/SEOMeta';
 import { ToastProvider, useToast } from '../components/common/Toast';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ordersApi } from '../api/ordersApi';
 import { formatCFA } from '../utils/currency';
 
@@ -40,8 +41,122 @@ const PAYMENT_METHODS = [
   },
 ];
 
+/* ─── Étape 0 : Choix d'authentification (invités uniquement) ───────────────── */
+function AuthChoicePanel({ onContinueAsGuest }) {
+  const { login } = useAuth();
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [showLogin, setShowLogin] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await login(loginEmail, loginPassword);
+      // Le useEffect dans CheckoutForm gère la transition d'étape
+    } catch (err) {
+      setLoginError(err.response?.data?.error?.message || 'Email ou mot de passe incorrect');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-card p-6 space-y-4">
+      <h2 className="font-bold text-gray-800 text-lg">Comment souhaitez-vous commander ?</h2>
+
+      {/* Option 1 : Continuer en tant qu'invité */}
+      <button
+        onClick={onContinueAsGuest}
+        className="w-full flex items-center gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-dva-blue hover:bg-dva-blue-muted text-left transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-dva-blue flex items-center justify-center flex-shrink-0 transition-colors">
+          <User className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-800">Continuer en tant qu'invité</p>
+          <p className="text-xs text-gray-500">Commandez sans créer de compte</p>
+        </div>
+        <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+      </button>
+
+      {/* Option 2 : Se connecter */}
+      {!showLogin ? (
+        <button
+          onClick={() => setShowLogin(true)}
+          className="w-full flex items-center gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-dva-blue hover:bg-dva-blue-muted text-left transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-dva-blue flex items-center justify-center flex-shrink-0 transition-colors">
+            <LogIn className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+          </div>
+          <div>
+            <p className="font-semibold text-gray-800">Se connecter</p>
+            <p className="text-xs text-gray-500">Accédez à vos informations enregistrées</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+        </button>
+      ) : (
+        <form onSubmit={handleLogin} className="border-2 border-dva-blue rounded-xl p-4 space-y-3">
+          <p className="font-semibold text-gray-800 flex items-center gap-2">
+            <LogIn className="w-4 h-4 text-dva-blue" /> Connexion
+          </p>
+          {loginError && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {loginError}
+            </div>
+          )}
+          <Input
+            label="Email"
+            type="email"
+            value={loginEmail}
+            onChange={(e) => setLoginEmail(e.target.value)}
+            autoFocus
+            required
+          />
+          <Input
+            label="Mot de passe"
+            type="password"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            required
+          />
+          <Button type="submit" loading={loginLoading} className="w-full" size="md">
+            Se connecter
+          </Button>
+          <button
+            type="button"
+            onClick={() => setShowLogin(false)}
+            className="w-full text-center text-sm text-gray-500 hover:underline"
+          >
+            Annuler
+          </button>
+        </form>
+      )}
+
+      {/* Option 3 : Créer un compte */}
+      <Link
+        to="/inscription"
+        state={{ returnTo: '/commande' }}
+        className="flex items-center gap-4 w-full p-4 border-2 border-gray-200 rounded-xl hover:border-dva-blue hover:bg-dva-blue-muted transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-dva-blue flex items-center justify-center flex-shrink-0 transition-colors">
+          <UserCheck className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-800">Créer un compte</p>
+          <p className="text-xs text-gray-500">Suivez vos commandes facilement</p>
+        </div>
+        <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+      </Link>
+    </div>
+  );
+}
+
 /* ─── Étape 3 : Notification de paiement ────────────────────────────────────── */
-function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm }) {
+function PaymentNotification({ orderId, paymentUrl, method, amount, guestToken, onConfirm }) {
   const [copied, setCopied] = useState(false);
   const isWave = method === 'wave';
 
@@ -58,7 +173,6 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
 
   return (
     <div className="bg-white rounded-xl shadow-card p-6 space-y-6">
-      {/* En-tête */}
       <div className={`rounded-xl p-5 ${colors.bg} ${colors.border} border`}>
         <div className="flex items-center gap-3 mb-3">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isWave ? 'bg-blue-500' : 'bg-orange-500'}`}>
@@ -79,13 +193,11 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
         </div>
       </div>
 
-      {/* Bouton principal de paiement */}
       <div className="space-y-3">
         <p className="text-sm font-medium text-gray-700 text-center">
           Cliquez sur le bouton ci-dessous pour ouvrir{' '}
           <strong>{isWave ? 'Wave' : 'Orange Money'}</strong> et confirmer le paiement :
         </p>
-
         <a
           href={paymentUrl}
           target="_blank"
@@ -96,8 +208,6 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
           Payer avec {isWave ? 'Wave' : 'Orange Money'}
           <ExternalLink className="w-5 h-5 opacity-75" />
         </a>
-
-        {/* Copier le lien */}
         <button
           onClick={handleCopy}
           className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -109,7 +219,6 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
         </button>
       </div>
 
-      {/* Instructions */}
       <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600 space-y-1.5">
         <p className="font-medium text-gray-800 mb-2">Comment payer :</p>
         {isWave ? (
@@ -129,7 +238,6 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
         )}
       </div>
 
-      {/* Bouton confirmation */}
       <Button onClick={onConfirm} size="lg" className="w-full" variant="secondary">
         <CheckCircle className="w-5 h-5" />
         J'ai effectué le paiement → Voir ma commande
@@ -145,22 +253,47 @@ function PaymentNotification({ orderId, paymentUrl, method, amount, onConfirm })
 /* ─── Formulaire principal ───────────────────────────────────────────────────── */
 function CheckoutForm() {
   const { items, total, clearCart } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [step, setStep] = useState(1);
+
+  const [step, setStep] = useState(user ? 1 : 0);
+  const [isGuest, setIsGuest] = useState(!user);
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('wave');
+  const [mobilePayment, setMobilePayment] = useState(null);
 
-  // Données de paiement mobile (étape 3)
-  const [mobilePayment, setMobilePayment] = useState(null); // { orderId, paymentUrl, method, amount }
-
+  const [guestEmail, setGuestEmail] = useState('');
   const [address, setAddress] = useState({
-    first_name: '', last_name: '', address1: '', address2: '',
-    city: '', postal_code: '', country: 'Sénégal', phone: '',
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
+    address1: '', address2: '',
+    city: '', postal_code: '',
+    country: 'Sénégal',
+    phone: user?.phone || '',
   });
   const [errors, setErrors] = useState({});
 
   const finalTotal = total;
+
+  // Transition automatique quand l'utilisateur se connecte via le panel intégré
+  useEffect(() => {
+    if (user && step === 0) {
+      setStep(1);
+      setIsGuest(false);
+      setAddress((prev) => ({
+        ...prev,
+        first_name: user.first_name || prev.first_name,
+        last_name: user.last_name || prev.last_name,
+        phone: user.phone || prev.phone,
+      }));
+    }
+  }, [user]);
+
+  const handleContinueAsGuest = () => {
+    setIsGuest(true);
+    setStep(1);
+  };
 
   const validateStep1 = () => {
     const errs = {};
@@ -169,6 +302,13 @@ function CheckoutForm() {
     if (!address.address1.trim()) errs.address1 = 'Adresse requise';
     if (!address.city.trim()) errs.city = 'Ville requise';
     if (!address.phone.trim()) errs.phone = 'Téléphone requis pour la livraison';
+    if (isGuest) {
+      if (!guestEmail.trim()) {
+        errs.guest_email = 'Email requis pour recevoir la confirmation';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+        errs.guest_email = 'Email invalide';
+      }
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -181,25 +321,31 @@ function CheckoutForm() {
   const handlePlaceOrder = async () => {
     setSubmitting(true);
     try {
-      const res = await ordersApi.createOrder({
+      const payload = {
         shipping_address: address,
         payment_method: paymentMethod,
-      });
-      const { order, payment_url } = res.data;
+      };
+      if (isGuest) {
+        payload.guest_email = guestEmail;
+        payload.items = items.map(({ product_id, quantity }) => ({ product_id, quantity }));
+      }
+
+      const res = await ordersApi.createOrder(payload);
+      const { order, payment_url, guest_token } = res.data;
       await clearCart();
 
       if (payment_url) {
-        // Paiement mobile : afficher le panneau de notification (étape 3)
         setMobilePayment({
           orderId: order.id,
           paymentUrl: payment_url,
           method: paymentMethod,
           amount: finalTotal,
+          guestToken: guest_token || null,
         });
         setStep(3);
       } else {
-        // Carte / cash on delivery : aller directement à la confirmation
-        navigate(`/commande/confirmation/${order.id}`);
+        const confirmPath = `/commande/confirmation/${order.id}${guest_token ? `?token=${guest_token}` : ''}`;
+        navigate(confirmPath);
       }
     } catch (err) {
       toast.error(err.response?.data?.error?.message || 'Erreur lors de la commande');
@@ -213,8 +359,10 @@ function CheckoutForm() {
     return null;
   }
 
-  // Labels des étapes selon le mode de paiement
-  const stepLabels = ['Livraison', 'Paiement', ...(mobilePayment ? ['Confirmer'] : [])];
+  const stepLabels = isGuest
+    ? ['Choix', 'Livraison', 'Paiement', ...(mobilePayment ? ['Confirmer'] : [])]
+    : ['Livraison', 'Paiement', ...(mobilePayment ? ['Confirmer'] : [])];
+  const stepOffset = isGuest ? 0 : -1; // pour aligner l'indicateur
 
   return (
     <div className="container-main py-8">
@@ -223,27 +371,56 @@ function CheckoutForm() {
 
       {/* Indicateur d'étapes */}
       <div className="flex items-center gap-3 mb-8">
-        {stepLabels.map((label, i) => (
-          <React.Fragment key={label}>
-            <div className={`flex items-center gap-2 ${step > i + 1 || step === i + 1 ? 'text-dva-blue font-semibold' : 'text-gray-400'}`}>
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-                step > i + 1 ? 'bg-green-500 text-white' :
-                step === i + 1 ? 'bg-dva-blue text-white' : 'bg-gray-200 text-gray-500'
-              }`}>{step > i + 1 ? '✓' : i + 1}</span>
-              <span className="hidden sm:block text-sm">{label}</span>
-            </div>
-            {i < stepLabels.length - 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
-          </React.Fragment>
-        ))}
+        {stepLabels.map((label, i) => {
+          const stepNum = isGuest ? i : i + 1;
+          return (
+            <React.Fragment key={label}>
+              <div className={`flex items-center gap-2 ${step > stepNum || step === stepNum ? 'text-dva-blue font-semibold' : 'text-gray-400'}`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                  step > stepNum ? 'bg-green-500 text-white' :
+                  step === stepNum ? 'bg-dva-blue text-white' : 'bg-gray-200 text-gray-500'
+                }`}>{step > stepNum ? '✓' : i + 1}</span>
+                <span className="hidden sm:block text-sm">{label}</span>
+              </div>
+              {i < stepLabels.length - 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
+            </React.Fragment>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
 
+          {/* ── Étape 0 : Choix authentification ───────────────────────────── */}
+          {step === 0 && (
+            <AuthChoicePanel onContinueAsGuest={handleContinueAsGuest} />
+          )}
+
           {/* ── Étape 1 : Adresse ───────────────────────────────────────────── */}
           {step === 1 && (
             <div className="bg-white rounded-xl shadow-card p-6 space-y-4">
               <h2 className="font-bold text-gray-800 text-lg">Adresse de livraison</h2>
+
+              {isGuest && (
+                <div>
+                  <Input
+                    label="Email de confirmation"
+                    type="email"
+                    value={guestEmail}
+                    error={errors.guest_email}
+                    onChange={(e) => {
+                      setGuestEmail(e.target.value);
+                      if (errors.guest_email) setErrors((p) => ({ ...p, guest_email: '' }));
+                    }}
+                    placeholder="votre@email.com"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Votre confirmation de commande sera envoyée à cet email.
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input label="Prénom" value={address.first_name} error={errors.first_name}
                   onChange={(e) => handleAddressChange('first_name', e.target.value)} required />
@@ -266,9 +443,15 @@ function CheckoutForm() {
               <Input label="Téléphone de livraison" value={address.phone} error={errors.phone}
                 onChange={(e) => handleAddressChange('phone', e.target.value)}
                 type="tel" placeholder="+221 77 000 00 00" required />
+
               <Button onClick={() => validateStep1() && setStep(2)} size="lg" className="w-full">
                 Continuer vers le paiement →
               </Button>
+              {isGuest && (
+                <button onClick={() => setStep(0)} className="w-full text-center text-sm text-gray-500 hover:underline">
+                  ← Retour
+                </button>
+              )}
             </div>
           )}
 
@@ -277,7 +460,6 @@ function CheckoutForm() {
             <div className="bg-white rounded-xl shadow-card p-6 space-y-5">
               <h2 className="font-bold text-gray-800 text-lg">Mode de paiement</h2>
 
-              {/* Récapitulatif adresse */}
               <div className="bg-gray-50 rounded-lg p-4 text-sm">
                 <div className="flex justify-between items-start">
                   <div>
@@ -285,12 +467,12 @@ function CheckoutForm() {
                     <p className="text-gray-600">{address.first_name} {address.last_name}</p>
                     <p className="text-gray-600">{address.address1}</p>
                     <p className="text-gray-600">{address.city} — {address.phone}</p>
+                    {isGuest && <p className="text-gray-500 text-xs mt-1">Confirmation : {guestEmail}</p>}
                   </div>
                   <button onClick={() => setStep(1)} className="text-dva-blue text-xs hover:underline">Modifier</button>
                 </div>
               </div>
 
-              {/* Choix paiement */}
               <div className="space-y-3">
                 {PAYMENT_METHODS.map(({ id, label, icon: Icon, desc, color }) => (
                   <label key={id} className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-colors ${
@@ -309,7 +491,6 @@ function CheckoutForm() {
                 ))}
               </div>
 
-              {/* Info selon méthode */}
               {(paymentMethod === 'wave' || paymentMethod === 'orange_money') && (
                 <div className={`rounded-xl p-4 flex items-start gap-3 ${paymentMethod === 'wave' ? 'bg-blue-50 border border-blue-100' : 'bg-orange-50 border border-orange-100'}`}>
                   <Smartphone className={`w-5 h-5 flex-shrink-0 mt-0.5 ${paymentMethod === 'wave' ? 'text-blue-500' : 'text-orange-500'}`} />
@@ -362,13 +543,17 @@ function CheckoutForm() {
               paymentUrl={mobilePayment.paymentUrl}
               method={mobilePayment.method}
               amount={mobilePayment.amount}
-              onConfirm={() => navigate(`/commande/confirmation/${mobilePayment.orderId}?payment=pending`)}
+              guestToken={mobilePayment.guestToken}
+              onConfirm={() => {
+                const confirmPath = `/commande/confirmation/${mobilePayment.orderId}?payment=pending${mobilePayment.guestToken ? `&token=${mobilePayment.guestToken}` : ''}`;
+                navigate(confirmPath);
+              }}
             />
           )}
         </div>
 
         {/* Mini récapitulatif */}
-        {step < 3 && (
+        {step > 0 && step < 3 && (
           <div className="bg-white rounded-xl shadow-card p-5 h-fit sticky top-24">
             <h3 className="font-bold text-gray-800 mb-4">Votre commande</h3>
             <div className="space-y-2 text-sm mb-4">

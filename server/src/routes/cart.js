@@ -30,4 +30,10 @@ router.delete('/items/:id', [
 
 router.delete('/', ctrl.clearCart);
 
+// Fusionner le panier invité (localStorage) dans le panier BDD après connexion
+router.post('/merge', [
+  body('items').isArray().withMessage('items doit être un tableau'),
+  handleValidation,
+], ctrl.mergeCart);
+
 module.exports = router;

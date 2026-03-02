@@ -77,9 +77,11 @@ function AppRoutes() {
               <Route path="/recherche-vehicule"      element={<VehicleSearchPage />} />
               <Route path="/informations/:slug"      element={<InfoPage />} />
 
+              {/* Checkout — accessible invités et connectés */}
+              <Route path="/commande" element={<CheckoutPage />} />
+              <Route path="/commande/confirmation/:id" element={<OrderConfirmationPage />} />
+
               {/* Protégées client */}
-              <Route path="/commande" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-              <Route path="/commande/confirmation/:id" element={<ProtectedRoute><OrderConfirmationPage /></ProtectedRoute>} />
               <Route path="/mon-compte" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
 
               {/* Invité */}

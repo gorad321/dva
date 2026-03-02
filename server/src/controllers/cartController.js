@@ -140,4 +140,40 @@ function clearCart(req, res, next) {
   }
 }
 
-module.exports = { getCart, addItem, updateItem, removeItem, clearCart };
+/**
+ * POST /api/cart/merge
+ * Fusionne le panier invité (localStorage) dans le panier BDD après connexion
+ * Utilise MAX(qty, excluded.qty) pour ne pas écraser des quantités supérieures déjà en BDD
+ */
+function mergeCart(req, res, next) {
+  try {
+    const db = getDb();
+    const { items } = req.body;
+
+    if (items && items.length > 0) {
+      for (const item of items) {
+        const productId = parseInt(item.product_id);
+        const qty = Math.max(1, parseInt(item.quantity) || 1);
+        if (!productId) continue;
+
+        const product = db.prepare('SELECT id, stock FROM products WHERE id = ?').get(productId);
+        if (!product) continue;
+
+        const safeQty = Math.min(qty, product.stock);
+        db.prepare(`
+          INSERT INTO cart_items (user_id, product_id, quantity)
+          VALUES (?, ?, ?)
+          ON CONFLICT(user_id, product_id) DO UPDATE SET quantity = MAX(quantity, excluded.quantity)
+        `).run(req.user.id, productId, safeQty);
+      }
+    }
+
+    const cartItems = db.prepare(CART_ITEM_SQL).all(req.user.id);
+    const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return res.json({ items: cartItems, total: Math.round(total * 100) / 100 });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getCart, addItem, updateItem, removeItem, clearCart, mergeCart };

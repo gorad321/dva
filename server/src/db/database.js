@@ -293,6 +293,21 @@ function runMigrations() {
     db.exec('ALTER TABLE brands ADD COLUMN logo_url TEXT');
     console.log('✅ Migration : colonne logo_url ajoutée à brands');
   }
+
+  // Colonnes pour commandes invité (guest checkout)
+  const hasGuestEmail = orderCols.some((c) => c.name === 'guest_email');
+  if (!hasGuestEmail) {
+    db.exec('ALTER TABLE orders ADD COLUMN guest_email TEXT');
+    console.log('✅ Migration : colonne guest_email ajoutée à orders');
+  }
+  const hasGuestToken = orderCols.some((c) => c.name === 'guest_token');
+  if (!hasGuestToken) {
+    db.exec('ALTER TABLE orders ADD COLUMN guest_token TEXT');
+    try {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_orders_guest_token ON orders(guest_token)');
+    } catch {}
+    console.log('✅ Migration : colonne guest_token ajoutée à orders');
+  }
 }
 
 module.exports = { getDb, initDatabase };

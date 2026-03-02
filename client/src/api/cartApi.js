@@ -6,4 +6,5 @@ export const cartApi = {
   updateItem: (id, quantity) => axiosClient.put(`/cart/items/${id}`, { quantity }),
   removeItem: (id) => axiosClient.delete(`/cart/items/${id}`),
   clearCart: () => axiosClient.delete('/cart'),
+  mergeCart: (items) => axiosClient.post('/cart/merge', { items }),
 };
