@@ -10,24 +10,37 @@ const { handleValidation } = require('../middleware/validate');
 const { requireAdmin } = require('../middleware/auth');
 const ctrl = require('../controllers/adminController');
 
-// ─── Multer : upload images icônes catégories ─────────────────────────────────
+// ─── Multer : upload images ───────────────────────────────────────────────────
 const uploadDir = path.join(__dirname, '../../public/uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `icon_${Date.now()}${ext}`);
-  },
-});
+const imageFilter = (_req, file, cb) => {
+  if (/^image\/(jpeg|png|svg\+xml|webp|gif)$/.test(file.mimetype)) cb(null, true);
+  else cb(new Error('Seules les images sont acceptées (jpg, png, svg, webp)'));
+};
+
 const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 Mo max
-  fileFilter: (_req, file, cb) => {
-    if (/^image\/(jpeg|png|svg\+xml|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Seules les images sont acceptées (jpg, png, svg, webp)'));
-  },
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `icon_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: imageFilter,
+});
+
+const uploadProduct = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `product_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 Mo max
+  fileFilter: imageFilter,
 });
 
 const router = Router();
@@ -160,6 +173,14 @@ router.put('/settings/hero', ctrl.updateHeroSlides);
 
 // ─── Upload image icône ────────────────────────────────────────────────────────
 router.post('/upload/icon', upload.single('image'), (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: { message: 'Aucun fichier reçu' } });
+    res.json({ url: `/uploads/${req.file.filename}` });
+  } catch (err) { next(err); }
+});
+
+// ─── Upload image produit ──────────────────────────────────────────────────────
+router.post('/upload/product-image', uploadProduct.single('image'), (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: { message: 'Aucun fichier reçu' } });
     res.json({ url: `/uploads/${req.file.filename}` });

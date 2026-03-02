@@ -4,7 +4,7 @@ import {
   TrendingUp, ShoppingCart, Pencil, Trash2, Plus, X, ChevronLeft, ChevronRight,
   Search, ToggleLeft, ToggleRight, Eye, Download, Image, Settings, Car,
   Disc, Filter, Circle, Zap, Droplets, Wrench, Gauge, Thermometer, Battery,
-  Wind, Shield, Box, Cog, Bolt, Smartphone,
+  Wind, Shield, Box, Cog, Bolt, Smartphone, Upload,
 } from 'lucide-react';
 import SEOMeta from '../components/common/SEOMeta';
 import Spinner from '../components/common/Spinner';
@@ -251,6 +251,7 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
   const [compat, setCompat] = useState([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [newImage, setNewImage] = useState({ url: '', alt_text: '', is_primary: false });
+  const [uploading, setUploading] = useState(false);
   const [newSpec, setNewSpec] = useState({ spec_key: '', spec_value: '' });
   const [newCompat, setNewCompat] = useState({ make: '', model: '', year_from: '', year_to: '', engine: '' });
   const [quickVehicle, setQuickVehicle] = useState({ make: '', model: '' });
@@ -305,6 +306,23 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleUploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/admin/upload/product-image', {
+        method: 'POST', credentials: 'include', body: formData,
+      });
+      const data = await res.json();
+      if (data.url) setNewImage((n) => ({ ...n, url: data.url }));
+      else toast.error(data.error?.message || 'Erreur upload');
+    } catch { toast.error('Erreur lors de l\'upload'); }
+    finally { setUploading(false); e.target.value = ''; }
   };
 
   const handleAddImage = async () => {
@@ -489,7 +507,16 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
                   </div>
                   <div className="border-t pt-4 space-y-2">
                     <p className="text-sm font-medium text-gray-700">Ajouter une image</p>
-                    <input className="input-dva" placeholder="URL de l'image *" value={newImage.url}
+                    {/* Upload depuis l'appareil */}
+                    <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl py-3 cursor-pointer transition-colors ${uploading ? 'border-dva-blue bg-dva-blue-muted' : 'border-gray-300 hover:border-dva-blue hover:bg-gray-50'}`}>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleUploadFile} disabled={uploading} />
+                      {uploading
+                        ? <><Spinner size="sm" /><span className="text-sm text-dva-blue">Envoi en cours...</span></>
+                        : <><Upload className="w-4 h-4 text-dva-blue" /><span className="text-sm text-gray-600">Choisir un fichier depuis l'appareil</span></>
+                      }
+                    </label>
+                    <p className="text-xs text-gray-400 text-center">— ou entrer une URL —</p>
+                    <input className="input-dva" placeholder="https://... ou /uploads/..." value={newImage.url}
                       onChange={(e) => setNewImage((n) => ({ ...n, url: e.target.value }))} />
                     <input className="input-dva" placeholder="Texte alternatif" value={newImage.alt_text}
                       onChange={(e) => setNewImage((n) => ({ ...n, alt_text: e.target.value }))} />
