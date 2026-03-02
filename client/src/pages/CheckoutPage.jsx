@@ -302,12 +302,8 @@ function CheckoutForm() {
     if (!address.address1.trim()) errs.address1 = 'Adresse requise';
     if (!address.city.trim()) errs.city = 'Ville requise';
     if (!address.phone.trim()) errs.phone = 'Téléphone requis pour la livraison';
-    if (isGuest) {
-      if (!guestEmail.trim()) {
-        errs.guest_email = 'Email requis pour recevoir la confirmation';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
-        errs.guest_email = 'Email invalide';
-      }
+    if (isGuest && guestEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      errs.guest_email = 'Email invalide';
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -326,7 +322,7 @@ function CheckoutForm() {
         payment_method: paymentMethod,
       };
       if (isGuest) {
-        payload.guest_email = guestEmail;
+        if (guestEmail.trim()) payload.guest_email = guestEmail.trim();
         payload.items = items.map(({ product_id, quantity }) => ({ product_id, quantity }));
       }
 
@@ -404,7 +400,7 @@ function CheckoutForm() {
               {isGuest && (
                 <div>
                   <Input
-                    label="Email de confirmation"
+                    label="Email de confirmation (optionnel)"
                     type="email"
                     value={guestEmail}
                     error={errors.guest_email}
@@ -413,10 +409,9 @@ function CheckoutForm() {
                       if (errors.guest_email) setErrors((p) => ({ ...p, guest_email: '' }));
                     }}
                     placeholder="votre@email.com"
-                    required
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Votre confirmation de commande sera envoyée à cet email.
+                    Renseignez votre email pour recevoir la confirmation de commande.
                   </p>
                 </div>
               )}
@@ -467,7 +462,7 @@ function CheckoutForm() {
                     <p className="text-gray-600">{address.first_name} {address.last_name}</p>
                     <p className="text-gray-600">{address.address1}</p>
                     <p className="text-gray-600">{address.city} — {address.phone}</p>
-                    {isGuest && <p className="text-gray-500 text-xs mt-1">Confirmation : {guestEmail}</p>}
+                    {isGuest && guestEmail && <p className="text-gray-500 text-xs mt-1">Confirmation : {guestEmail}</p>}
                   </div>
                   <button onClick={() => setStep(1)} className="text-dva-blue text-xs hover:underline">Modifier</button>
                 </div>

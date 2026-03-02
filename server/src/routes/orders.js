@@ -17,10 +17,10 @@ router.post('/', [
   body('shipping_address.postal_code').trim().escape().optional({ checkFalsy: true }),
   body('shipping_address.country').trim().escape().notEmpty().withMessage('Pays requis'),
   body('payment_method').isIn(['card', 'wave', 'orange_money', 'cash_on_delivery']).withMessage('Mode de paiement invalide'),
-  // Champs requis uniquement pour les invités
+  // Email optionnel pour les invités (format validé seulement si fourni)
   body('guest_email')
-    .if((val, { req }) => !req.user)
-    .isEmail().normalizeEmail().withMessage('Email valide requis pour commander en tant qu\'invité'),
+    .optional({ checkFalsy: true })
+    .isEmail().normalizeEmail().withMessage('Email invalide'),
   body('items')
     .if((val, { req }) => !req.user)
     .isArray({ min: 1 }).withMessage('La liste des articles est requise pour les invités'),
