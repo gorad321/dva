@@ -59,8 +59,8 @@ function getProducts(req, res, next) {
              p.stock, p.is_featured, p.sku,
              c.name AS category_name, c.slug AS category_slug,
              b.name AS brand_name, b.slug AS brand_slug,
-             (SELECT url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_url,
-             (SELECT alt_text FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_alt,
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url,
+             (SELECT alt_text FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_alt,
              (SELECT AVG(rating) FROM reviews WHERE product_id = p.id) AS avg_rating,
              (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count
       FROM products p
@@ -111,7 +111,7 @@ function getSearchSuggestions(req, res, next) {
     const suggestions = db.prepare(`
       SELECT p.name, p.slug,
              c.name AS category,
-             (SELECT url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_url
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url
       FROM products p
       JOIN categories c ON c.id = p.category_id
       WHERE p.name LIKE ?
@@ -217,8 +217,8 @@ function getFeaturedProducts(req, res, next) {
     const products = db.prepare(`
       SELECT p.id, p.name, p.slug, p.short_description, p.price, p.original_price,
              p.stock, c.name AS category_name, b.name AS brand_name,
-             (SELECT url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_url,
-             (SELECT alt_text FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_alt,
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url,
+             (SELECT alt_text FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_alt,
              (SELECT AVG(rating) FROM reviews WHERE product_id = p.id) AS avg_rating
       FROM products p
       JOIN categories c ON c.id = p.category_id
