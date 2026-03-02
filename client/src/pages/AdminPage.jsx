@@ -2082,14 +2082,17 @@ function AdminContent() {
     <>
       <SEOMeta title="Administration DVA" />
       <div className="min-h-screen bg-gray-50">
-        <div className="bg-dva-blue text-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="bg-dva-blue text-white px-3 md:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <a href="/">
-              <img src="lago_bi.png" alt="DVA" className="h-10 w-auto object-contain" />
+              <img src="lago_bi.png" alt="DVA" className="h-8 md:h-10 w-auto object-contain" />
             </a>
-            <span className="text-white font-semibold text-lg">Administration</span>
+            <span className="text-white font-semibold text-sm md:text-lg">Administration</span>
           </div>
-          <a href="/" className="text-blue-200 hover:text-white text-sm">← Retour au site</a>
+          <a href="/" className="text-blue-200 hover:text-white text-xs md:text-sm whitespace-nowrap">
+            <span className="md:hidden">← Site</span>
+            <span className="hidden md:inline">← Retour au site</span>
+          </a>
         </div>
 
         {/* Navigation mobile — barre horizontale scrollable */}
