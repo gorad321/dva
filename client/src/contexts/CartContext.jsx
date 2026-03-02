@@ -23,9 +23,10 @@ function calcTotal(items) {
 }
 
 export function CartProvider({ children }) {
-  const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
+  const { user, loading: authLoading } = useAuth();
+  // Initialisation synchrone depuis localStorage pour éviter le flash d'état vide
+  const [items, setItems] = useState(readGuestCart);
+  const [total, setTotal] = useState(() => calcTotal(readGuestCart()));
   const [loading, setLoading] = useState(false);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -74,14 +75,16 @@ export function CartProvider({ children }) {
 
   // Basculer entre panier invité et panier BDD selon l'état d'authentification
   useEffect(() => {
+    if (authLoading) return; // Attendre la résolution de l'auth
     if (user) {
-      loadDbCart();
+      loadDbCart(); // Connecté : charger le panier BDD
     } else {
+      // Invité : rafraîchir depuis localStorage (déjà initialisé dans useState)
       const guestItems = readGuestCart();
       setItems(guestItems);
       setTotal(calcTotal(guestItems));
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const addItem = useCallback(async (productId, quantity = 1, productData = null) => {
     if (!user) {
