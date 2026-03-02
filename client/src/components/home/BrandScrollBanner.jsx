@@ -1,21 +1,7 @@
 import { Link } from 'react-router-dom';
 
-/* Fallback Clearbit si la marque n'a pas de logo_url renseigné */
-const CLEARBIT_FALLBACK = {
-  'Bosch':       'https://logo.clearbit.com/bosch.com',
-  'Brembo':      'https://logo.clearbit.com/brembo.com',
-  'Castrol':     'https://logo.clearbit.com/castrol.com',
-  'Continental': 'https://logo.clearbit.com/continental.com',
-  'Dayco':       'https://logo.clearbit.com/dayco.com',
-  'K&N':         'https://logo.clearbit.com/knfilters.com',
-  'Mann Filter': 'https://logo.clearbit.com/mann-hummel.com',
-  'Michelin':    'https://logo.clearbit.com/michelin.com',
-  'NGK':         'https://logo.clearbit.com/ngksparkplugs.com',
-  'Varta':       'https://logo.clearbit.com/varta-automotive.com',
-};
-
 function BrandItem({ brand }) {
-  const logoUrl = brand.logo_url || CLEARBIT_FALLBACK[brand.name] || null;
+  const logoUrl = brand.logo_url || null;
 
   return (
     <Link
