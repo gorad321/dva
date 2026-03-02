@@ -1,13 +1,19 @@
 /**
  * DVA - Application principale avec routes React Router
  */
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
 import Spinner from './components/common/Spinner';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 
 // Lazy loading des pages
 const HomePage              = lazy(() => import('./pages/HomePage'));
@@ -106,6 +112,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <CartProvider>
           <AppRoutes />
