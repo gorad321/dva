@@ -80,7 +80,7 @@ function getAdminProducts(req, res, next) {
     const total = db.prepare(`SELECT COUNT(*) AS c FROM products p ${where}`).get(...params).c;
     const products = db.prepare(`
       SELECT p.*, c.name AS category_name, b.name AS brand_name,
-             (SELECT url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_url
+             (SELECT url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS image_url
       FROM products p
       JOIN categories c ON c.id = p.category_id
       JOIN brands b ON b.id = p.brand_id
