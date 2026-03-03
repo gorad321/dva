@@ -3,14 +3,25 @@
  */
 const { getDb } = require('../db/database');
 
+// CTE image : une seule passe sur product_images au lieu d'une sous-requête par ligne
 const CART_ITEM_SQL = `
+  WITH pi AS (
+    SELECT product_id, url
+    FROM product_images
+    WHERE rowid IN (
+      SELECT MIN(rowid) FROM product_images
+      GROUP BY product_id
+      HAVING MAX(is_primary) = is_primary
+    )
+  )
   SELECT ci.id, ci.quantity,
          p.id AS product_id, p.name, p.slug, p.price, p.original_price, p.stock,
-         (SELECT url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image_url,
+         pi.url AS image_url,
          b.name AS brand_name
   FROM cart_items ci
-  JOIN products p ON p.id = ci.product_id
-  JOIN brands b ON b.id = p.brand_id
+  JOIN products p  ON p.id = ci.product_id
+  JOIN brands   b  ON b.id = p.brand_id
+  LEFT JOIN pi     ON pi.product_id = p.id
   WHERE ci.user_id = ?
   ORDER BY ci.id ASC
 `;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import LazyImage from '../common/LazyImage';
@@ -12,10 +12,22 @@ export default function CartItem({ item }) {
   const [updating, setUpdating] = useState(false);
   const [imageUrl, setImageUrl] = useState(item.image_url);
 
-  // Rafraîchir l'image depuis l'API (corrige les URLs en cache dans localStorage)
+  // Refs pour éviter les setState après démontage et les doubles appels
+  const abortRef      = useRef(null);
+  const debounceRef   = useRef(null);
+  const pendingQtyRef = useRef(null);
+
+  // ── Rafraîchir l'image uniquement si elle est absente ───────────────────────
+  // Si image_url existe déjà dans le panier → pas de fetch inutile
   useEffect(() => {
-    if (!item.slug) return;
-    fetch(`/api/products/${item.slug}`, { credentials: 'include' })
+    if (!item.slug || item.image_url) return;
+
+    abortRef.current = new AbortController();
+
+    fetch(`/api/products/${item.slug}`, {
+      credentials: 'include',
+      signal: abortRef.current.signal,
+    })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         const imgs = data?.product?.images;
@@ -23,28 +35,57 @@ export default function CartItem({ item }) {
         const primary = imgs.find((i) => i.is_primary) ?? imgs[0];
         if (primary?.url) setImageUrl(primary.url);
       })
-      .catch(() => {});
-  }, [item.slug]);
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.warn('[CartItem] fetch image échoué :', err.message);
+        }
+      });
 
-  const handleQuantityChange = async (newQty) => {
-    if (newQty < 1) return;
-    setUpdating(true);
-    try {
-      await updateItem(item.id, newQty);
-    } catch (err) {
-      toast.error(err.response?.data?.error?.message || 'Erreur de mise à jour');
-    } finally {
-      setUpdating(false);
-    }
-  };
+    return () => abortRef.current?.abort();
+  }, [item.slug, item.image_url]);
+
+  // Nettoyage global au démontage
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  // ── Changement de quantité avec debounce 300ms ───────────────────────────────
+  // Les clics rapides (+/-) consolident en un seul appel API
+  const handleQuantityChange = useCallback((newQty) => {
+    if (newQty < 1 || newQty > item.stock) return;
+
+    pendingQtyRef.current = newQty;
+    clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      const qty = pendingQtyRef.current;
+      pendingQtyRef.current = null;
+      setUpdating(true);
+      try {
+        await updateItem(item.id, qty);
+      } catch (err) {
+        const msg = err.response?.data?.error?.message;
+        toast.error(msg || 'Erreur de mise à jour de la quantité');
+        console.error('[CartItem] updateItem :', err);
+      } finally {
+        setUpdating(false);
+      }
+    }, 300);
+  }, [item.id, item.stock, updateItem, toast]);
 
   const handleRemove = async () => {
     try {
       await removeItem(item.id);
-    } catch {
+    } catch (err) {
       toast.error('Erreur lors de la suppression');
+      console.error('[CartItem] removeItem :', err);
     }
   };
+
+  const atMaxStock = item.quantity >= item.stock;
 
   return (
     <div className="flex gap-4 py-4 border-b border-gray-100">
@@ -66,15 +107,28 @@ export default function CartItem({ item }) {
         <p className="text-xs text-gray-500 mt-0.5">{item.brand_name}</p>
 
         <div className="flex items-center justify-between mt-3">
-          {/* Quantité */}
-          <div className={`flex items-center border border-gray-300 rounded-lg overflow-hidden ${updating ? 'opacity-50' : ''}`}>
-            <button onClick={() => handleQuantityChange(item.quantity - 1)} disabled={updating}
-              className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 font-bold">−</button>
-            <span className="px-3 py-1.5 text-sm font-semibold border-x border-gray-300 min-w-[2.5rem] text-center">
-              {item.quantity}
-            </span>
-            <button onClick={() => handleQuantityChange(item.quantity + 1)} disabled={updating || item.quantity >= item.stock}
-              className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 font-bold">+</button>
+          {/* Quantité + indicateur stock max */}
+          <div className="flex flex-col items-start gap-1">
+            <div className={`flex items-center border border-gray-300 rounded-lg overflow-hidden ${updating ? 'opacity-50' : ''}`}>
+              <button
+                onClick={() => handleQuantityChange(item.quantity - 1)}
+                disabled={updating || item.quantity <= 1}
+                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 font-bold disabled:opacity-40">
+                −
+              </button>
+              <span className="px-3 py-1.5 text-sm font-semibold border-x border-gray-300 min-w-[2.5rem] text-center">
+                {item.quantity}
+              </span>
+              <button
+                onClick={() => handleQuantityChange(item.quantity + 1)}
+                disabled={updating || atMaxStock}
+                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 font-bold disabled:opacity-40">
+                +
+              </button>
+            </div>
+            {atMaxStock && (
+              <p className="text-xs text-orange-500">Stock max atteint</p>
+            )}
           </div>
 
           {/* Prix */}
