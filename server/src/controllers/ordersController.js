@@ -25,7 +25,13 @@ async function createOrder(req, res, next) {
       }
       cartItems = [];
       for (const item of guestItems) {
-        const product = db.prepare('SELECT id, name, price, stock FROM products WHERE id = ?').get(item.product_id);
+        const productId = parseInt(item.product_id);
+        if (!productId || productId <= 0 || isNaN(productId)) {
+          return res.status(400).json({
+            error: { code: 'INVALID_PRODUCT', message: 'Identifiant produit invalide dans le panier. Videz votre panier et réessayez.' },
+          });
+        }
+        const product = db.prepare('SELECT id, name, price, stock FROM products WHERE id = ?').get(productId);
         if (!product) {
           return res.status(400).json({ error: { code: 'PRODUCT_NOT_FOUND', message: 'Produit introuvable' } });
         }

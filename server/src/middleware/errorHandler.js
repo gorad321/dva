@@ -48,11 +48,12 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-  // Erreur inattendue (500)
+  // Erreur inattendue (500) — message technique affiché sauf en NODE_ENV=production strict
+  const isProd = process.env.NODE_ENV === 'production';
   return res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'development' ? err.message : 'Erreur interne du serveur',
+      message: isProd ? 'Erreur interne du serveur' : (err.message || 'Erreur interne du serveur'),
     },
   });
 }
