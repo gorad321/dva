@@ -246,6 +246,14 @@ function createTables() {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- ─── Images uploadées (BLOB en BDD, persiste sur Railway) ────────────────
+    CREATE TABLE IF NOT EXISTS image_blobs (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      mime_type  TEXT NOT NULL,
+      data       BLOB NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 

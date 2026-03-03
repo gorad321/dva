@@ -6,6 +6,7 @@ const { body, query } = require('express-validator');
 const multer = require('multer');
 const { handleValidation } = require('../middleware/validate');
 const { requireAdmin } = require('../middleware/auth');
+const { getDb } = require('../db/database');
 const ctrl = require('../controllers/adminController');
 
 // ─── Multer : upload images en mémoire (base64 → BDD, persist sur Railway) ────
@@ -158,8 +159,9 @@ router.put('/settings/hero', ctrl.updateHeroSlides);
 router.post('/upload/icon', upload.single('image'), (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: { message: 'Aucun fichier reçu' } });
-    const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    res.json({ url: dataUrl });
+    const db = getDb();
+    const result = db.prepare('INSERT INTO image_blobs (mime_type, data) VALUES (?, ?)').run(req.file.mimetype, req.file.buffer);
+    res.json({ url: `/api/images/${result.lastInsertRowid}` });
   } catch (err) { next(err); }
 });
 
@@ -167,8 +169,9 @@ router.post('/upload/icon', upload.single('image'), (req, res, next) => {
 router.post('/upload/product-image', uploadProduct.single('image'), (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: { message: 'Aucun fichier reçu' } });
-    const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    res.json({ url: dataUrl });
+    const db = getDb();
+    const result = db.prepare('INSERT INTO image_blobs (mime_type, data) VALUES (?, ?)').run(req.file.mimetype, req.file.buffer);
+    res.json({ url: `/api/images/${result.lastInsertRowid}` });
   } catch (err) { next(err); }
 });
 

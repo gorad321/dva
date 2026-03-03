@@ -142,6 +142,18 @@ const promoLimiter = rateLimit({
 
 app.use('/api/', globalLimiter);
 
+// ─── Images uploadées (BLOB SQLite, public, mise en cache 1 an) ───────────────
+app.get('/api/images/:id', (req, res, next) => {
+  try {
+    const { getDb } = require('./src/db/database');
+    const blob = getDb().prepare('SELECT mime_type, data FROM image_blobs WHERE id = ?').get(req.params.id);
+    if (!blob) return res.status(404).end();
+    res.set('Content-Type', blob.mime_type);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(Buffer.from(blob.data));
+  } catch (err) { next(err); }
+});
+
 // ─── Routes API ───────────────────────────────────────────────────────────────
 // Appliquer les rate limiters spécifiques avant les routers
 app.use('/api/auth/login', loginLimiter);
