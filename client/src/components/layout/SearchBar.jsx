@@ -49,7 +49,7 @@ export default function SearchBar() {
     <div ref={ref} className="relative">
       <form onSubmit={handleSearch} className="flex items-center">
         <input
-          type="search"
+          type="text"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
           onFocus={() => query.length >= 2 && setShowSuggestions(true)}
