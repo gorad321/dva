@@ -47,22 +47,24 @@ export default function SearchBar() {
 
   return (
     <div ref={ref} className="relative">
-      <form onSubmit={handleSearch} className="flex items-center">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
-          onFocus={() => query.length >= 2 && setShowSuggestions(true)}
-          placeholder="Rechercher une pièce, une marque, un véhicule..."
-          className="w-full rounded-l-md border-0 px-4 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-dva-red"
-        />
-        {query && (
-          <button type="button" onClick={() => { setQuery(''); setSuggestions([]); }}
-            className="bg-white px-2 py-2.5 text-gray-400 hover:text-gray-600">
-            <X className="w-4 h-4" />
-          </button>
-        )}
-        <button type="submit" className="bg-dva-red hover:bg-dva-red-dark text-white px-4 py-2.5 rounded-r-md transition-colors">
+      <form onSubmit={handleSearch} className="flex items-stretch">
+        <div className="flex flex-1 items-center bg-white rounded-l-md overflow-hidden focus-within:ring-2 focus-within:ring-dva-red">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => query.length >= 2 && setShowSuggestions(true)}
+            placeholder="Rechercher une pièce, une marque, un véhicule..."
+            className="flex-1 min-w-0 border-0 px-4 py-2.5 text-sm text-gray-900 bg-transparent focus:outline-none"
+          />
+          {query && (
+            <button type="button" onClick={() => { setQuery(''); setSuggestions([]); }}
+              className="px-2 text-gray-400 hover:text-gray-600 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <button type="submit" className="bg-dva-red hover:bg-dva-red-dark text-white px-4 rounded-r-md transition-colors flex items-center">
           <Search className="w-5 h-5" />
         </button>
       </form>
