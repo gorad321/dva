@@ -87,7 +87,7 @@ async function createOrder(req, res, next) {
         JSON.stringify(shipping_address),
         payment_method,
         paymentStatus,
-        isGuest ? guest_email : null,
+        isGuest ? (guest_email ?? null) : null,
         guestToken
       );
       orderId = orderResult.lastInsertRowid;
