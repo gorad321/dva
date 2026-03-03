@@ -428,16 +428,14 @@ function CheckoutForm() {
               <Input label="Complément d'adresse" value={address.address2}
                 onChange={(e) => handleAddressChange('address2', e.target.value)}
                 placeholder="Appartement, bâtiment, point de repère..." />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Ville" value={address.city} error={errors.city}
-                  onChange={(e) => handleAddressChange('city', e.target.value)} required />
-                <Input label="Code postal (optionnel)" value={address.postal_code}
-                  onChange={(e) => handleAddressChange('postal_code', e.target.value)}
-                  placeholder="Ex : 10700" />
-              </div>
+              <Input label="Ville" value={address.city} error={errors.city}
+                onChange={(e) => handleAddressChange('city', e.target.value)} required />
               <Input label="Téléphone de livraison" value={address.phone} error={errors.phone}
                 onChange={(e) => handleAddressChange('phone', e.target.value)}
                 type="tel" placeholder="+221 77 000 00 00" required />
+              <Input label="Code postal (optionnel)" value={address.postal_code}
+                onChange={(e) => handleAddressChange('postal_code', e.target.value)}
+                placeholder="Ex : 10700" />
 
               <Button onClick={() => validateStep1() && setStep(2)} size="lg" className="w-full">
                 Continuer vers le paiement →
