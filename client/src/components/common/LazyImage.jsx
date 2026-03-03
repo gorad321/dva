@@ -19,7 +19,15 @@ export default function LazyImage({ src, alt, className = '', fallback = PLACEHO
     const el = containerRef.current;
     if (!el) return;
 
-    // rootMargin="200px" : précharge l'image 200px avant qu'elle soit visible
+    // Vérification synchrone : si l'élément est déjà visible (ex: image produit
+    // au-dessus du fold), pas besoin d'attendre le callback async de l'observer
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 200) {
+      setInView(true);
+      return;
+    }
+
+    // Élément hors viewport → observer asynchrone (rootMargin 200px = préchargement)
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
