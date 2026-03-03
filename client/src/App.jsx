@@ -66,9 +66,7 @@ function AppRoutes() {
       {!isAdmin && <Header />}
       <main className="flex-1">
         <Suspense fallback={<PageSpinner />}>
-          {/* key={location.key} force le remount → déclenche l'animation CSS page-enter */}
-          <div key={location.key} className="page-enter">
-            <Routes>
+          <Routes>
               {/* Publiques */}
               <Route path="/"                       element={<HomePage />} />
               <Route path="/catalogue"              element={<CatalogPage />} />
@@ -103,7 +101,6 @@ function AppRoutes() {
                 </div>
               } />
             </Routes>
-          </div>
         </Suspense>
       </main>
       {!isAdmin && <Footer />}
