@@ -75,7 +75,13 @@ export function CartProvider({ children }) {
   useEffect(() => {
     if (authLoading) return; // Attendre la résolution de l'auth
     if (user) {
-      loadDbCart(); // Connecté : charger le panier BDD
+      // Si des articles invité existent dans localStorage, les fusionner
+      const guestItems = readGuestCart();
+      if (guestItems.length > 0) {
+        mergePendingGuestCart();
+      } else {
+        loadDbCart();
+      }
     } else {
       // Invité : rafraîchir depuis localStorage (déjà initialisé dans useState)
       const guestItems = readGuestCart();
