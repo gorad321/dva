@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import LazyImage from '../common/LazyImage';
@@ -10,6 +10,16 @@ export default function CartItem({ item }) {
   const { updateItem, removeItem } = useCart();
   const toast = useToast();
   const [updating, setUpdating] = useState(false);
+  const [imageUrl, setImageUrl] = useState(item.image_url);
+
+  // Rafraîchir l'image depuis l'API (corrige les URLs en cache dans localStorage)
+  useEffect(() => {
+    if (!item.slug) return;
+    fetch(`/api/products/${item.slug}`, { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.product?.image_url) setImageUrl(data.product.image_url); })
+      .catch(() => {});
+  }, [item.slug]);
 
   const handleQuantityChange = async (newQty) => {
     if (newQty < 1) return;
@@ -36,7 +46,7 @@ export default function CartItem({ item }) {
       {/* Image */}
       <Link to={`/produit/${item.slug}`} className="flex-shrink-0">
         <LazyImage
-          src={item.image_url}
+          src={imageUrl}
           alt={item.name}
           className="w-20 h-20 rounded-lg"
         />
