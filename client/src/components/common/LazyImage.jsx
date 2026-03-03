@@ -27,7 +27,7 @@ export default function LazyImage({ src, alt, className = '', fallback = PLACEHO
       <img
         src={imgSrc}
         alt={alt}
-        loading="lazy"
+        loading="eager"
         onLoad={() => {
           clearTimeout(timerRef.current);
           setLoaded(true);
