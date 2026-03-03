@@ -5,37 +5,46 @@ const PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg
 export default function LazyImage({ src, alt, className = '', fallback = PLACEHOLDER }) {
   const [imgSrc, setImgSrc] = useState(src || fallback);
   const [loaded, setLoaded] = useState(false);
-  const timerRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const usedFallback = useRef(!src);
 
-  // Si src change (ex: navigation), réinitialiser
+  // Réinitialiser quand src change
   useEffect(() => {
+    usedFallback.current = !src;
     setImgSrc(src || fallback);
     setLoaded(false);
-  }, [src, fallback]);
 
-  // Timeout : si l'image ne charge pas en 6s, utiliser le placeholder
-  useEffect(() => {
-    if (loaded) return;
-    timerRef.current = setTimeout(() => {
+    // Timeout uniquement pour les vraies URLs (pas pour le fallback)
+    if (src) {
+      timeoutRef.current = setTimeout(() => {
+        usedFallback.current = true;
+        setImgSrc(fallback);
+      }, 5000);
+    }
+
+    return () => clearTimeout(timeoutRef.current);
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLoad = () => {
+    clearTimeout(timeoutRef.current);
+    setLoaded(true);
+  };
+
+  const handleError = () => {
+    clearTimeout(timeoutRef.current);
+    if (!usedFallback.current) {
+      usedFallback.current = true;
       setImgSrc(fallback);
-    }, 6000);
-    return () => clearTimeout(timerRef.current);
-  }, [imgSrc, loaded, fallback]);
+    }
+  };
 
   return (
     <div className={`relative overflow-hidden bg-gray-100 ${className}`}>
       <img
         src={imgSrc}
         alt={alt}
-        loading="eager"
-        onLoad={() => {
-          clearTimeout(timerRef.current);
-          setLoaded(true);
-        }}
-        onError={() => {
-          clearTimeout(timerRef.current);
-          if (imgSrc !== fallback) setImgSrc(fallback);
-        }}
+        onLoad={handleLoad}
+        onError={handleError}
         className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
       />
       {!loaded && <div className="absolute inset-0 skeleton" />}
