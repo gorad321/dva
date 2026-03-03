@@ -308,6 +308,19 @@ function runMigrations() {
     } catch {}
     console.log('✅ Migration : colonne guest_token ajoutée à orders');
   }
+
+  // Remplacer les URLs picsum.photos (lentes/bloquées) par placehold.co (CDN Cloudflare)
+  const picsumImages = db.prepare(
+    "SELECT pi.id, p.name FROM product_images pi JOIN products p ON pi.product_id = p.id WHERE pi.url LIKE '%picsum.photos%'"
+  ).all();
+  if (picsumImages.length > 0) {
+    const updateImg = db.prepare('UPDATE product_images SET url = ? WHERE id = ?');
+    picsumImages.forEach(({ id, name }) => {
+      const text = encodeURIComponent(name.substring(0, 24).replace(/\s+/g, '+'));
+      updateImg.run(`https://placehold.co/600x400/E8EEF8/003DA5?text=${text}`, id);
+    });
+    console.log(`✅ Migration : ${picsumImages.length} URLs picsum.photos remplacées par placehold.co`);
+  }
 }
 
 module.exports = { getDb, initDatabase };
