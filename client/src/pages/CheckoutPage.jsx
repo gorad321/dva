@@ -397,6 +397,23 @@ function CheckoutForm() {
             <div className="bg-white rounded-xl shadow-card p-6 space-y-4">
               <h2 className="font-bold text-gray-800 text-lg">Adresse de livraison</h2>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Prénom" value={address.first_name} error={errors.first_name}
+                  onChange={(e) => handleAddressChange('first_name', e.target.value)} required />
+                <Input label="Nom" value={address.last_name} error={errors.last_name}
+                  onChange={(e) => handleAddressChange('last_name', e.target.value)} required />
+              </div>
+              <Input label="Adresse" value={address.address1} error={errors.address1}
+                onChange={(e) => handleAddressChange('address1', e.target.value)}
+                placeholder="N° et nom de rue / quartier" required />
+              <Input label="Complément d'adresse" value={address.address2}
+                onChange={(e) => handleAddressChange('address2', e.target.value)}
+                placeholder="Appartement, bâtiment, point de repère..." />
+              <Input label="Ville" value={address.city} error={errors.city}
+                onChange={(e) => handleAddressChange('city', e.target.value)} required />
+              <Input label="Téléphone de livraison" value={address.phone} error={errors.phone}
+                onChange={(e) => handleAddressChange('phone', e.target.value)}
+                type="tel" placeholder="+221 77 000 00 00" required />
               {isGuest && (
                 <div>
                   <Input
@@ -415,24 +432,6 @@ function CheckoutForm() {
                   </p>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Prénom" value={address.first_name} error={errors.first_name}
-                  onChange={(e) => handleAddressChange('first_name', e.target.value)} required />
-                <Input label="Nom" value={address.last_name} error={errors.last_name}
-                  onChange={(e) => handleAddressChange('last_name', e.target.value)} required />
-              </div>
-              <Input label="Adresse" value={address.address1} error={errors.address1}
-                onChange={(e) => handleAddressChange('address1', e.target.value)}
-                placeholder="N° et nom de rue / quartier" required />
-              <Input label="Complément d'adresse" value={address.address2}
-                onChange={(e) => handleAddressChange('address2', e.target.value)}
-                placeholder="Appartement, bâtiment, point de repère..." />
-              <Input label="Ville" value={address.city} error={errors.city}
-                onChange={(e) => handleAddressChange('city', e.target.value)} required />
-              <Input label="Téléphone de livraison" value={address.phone} error={errors.phone}
-                onChange={(e) => handleAddressChange('phone', e.target.value)}
-                type="tel" placeholder="+221 77 000 00 00" required />
               <Input label="Code postal (optionnel)" value={address.postal_code}
                 onChange={(e) => handleAddressChange('postal_code', e.target.value)}
                 placeholder="Ex : 10700" />
