@@ -29,7 +29,7 @@ export default function LazyImage({ src, alt, className = '', fallback = PLACEHO
   }, []);
 
   return (
-    <div ref={imgRef} className={`overflow-hidden bg-dva-blue-muted ${className}`}>
+    <div ref={imgRef} className={`relative overflow-hidden bg-dva-blue-muted ${className}`}>
       {inView && (
         <img
           src={error ? fallback : src}
