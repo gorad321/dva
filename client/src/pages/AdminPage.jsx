@@ -319,8 +319,21 @@ function ProductModal({ product, categories, brands, onSave, onClose }) {
         method: 'POST', credentials: 'include', body: formData,
       });
       const data = await res.json();
-      if (data.url) setNewImage((n) => ({ ...n, url: data.url }));
-      else toast.error(data.error?.message || 'Erreur upload');
+      if (!data.url) { toast.error(data.error?.message || 'Erreur upload'); return; }
+
+      if (product?.id) {
+        // Produit existant : ajouter directement l'image (principale si c'est la première)
+        const r = await adminApi.addProductImage(product.id, {
+          url: data.url,
+          alt_text: file.name.replace(/\.[^.]+$/, ''),
+          is_primary: images.length === 0,
+        });
+        setImages((prev) => [...prev, r.data.image]);
+        toast.success('Image ajoutée');
+      } else {
+        // Nouveau produit pas encore sauvegardé : mettre l'URL dans le champ
+        setNewImage((n) => ({ ...n, url: data.url }));
+      }
     } catch { toast.error('Erreur lors de l\'upload'); }
     finally { setUploading(false); e.target.value = ''; }
   };
