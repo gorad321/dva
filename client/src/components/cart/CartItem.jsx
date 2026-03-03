@@ -17,7 +17,12 @@ export default function CartItem({ item }) {
     if (!item.slug) return;
     fetch(`/api/products/${item.slug}`, { credentials: 'include' })
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.product?.image_url) setImageUrl(data.product.image_url); })
+      .then((data) => {
+        const imgs = data?.product?.images;
+        if (!imgs?.length) return;
+        const primary = imgs.find((i) => i.is_primary) ?? imgs[0];
+        if (primary?.url) setImageUrl(primary.url);
+      })
       .catch(() => {});
   }, [item.slug]);
 
