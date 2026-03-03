@@ -341,6 +341,9 @@ function CheckoutForm() {
         setStep(3);
       } else {
         const confirmPath = `/commande/confirmation/${order.id}${guest_token ? `?token=${guest_token}` : ''}`;
+        if (paymentMethod === 'wave' || paymentMethod === 'orange_money') {
+          toast.error('Le service de paiement mobile est temporairement indisponible. Votre commande est enregistrée — vous serez contacté pour le paiement.');
+        }
         navigate(confirmPath);
       }
     } catch (err) {

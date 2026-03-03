@@ -3,16 +3,12 @@
  */
 const { getDb } = require('../db/database');
 
-// CTE image : une seule passe sur product_images au lieu d'une sous-requête par ligne
+// CTE image : image primaire en priorité (is_primary DESC), sinon première image par id
 const CART_ITEM_SQL = `
   WITH pi AS (
-    SELECT product_id, url
+    SELECT product_id, url,
+           ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY is_primary DESC, id ASC) AS rn
     FROM product_images
-    WHERE rowid IN (
-      SELECT MIN(rowid) FROM product_images
-      GROUP BY product_id
-      HAVING MAX(is_primary) = is_primary
-    )
   )
   SELECT ci.id, ci.quantity,
          p.id AS product_id, p.name, p.slug, p.price, p.original_price, p.stock,
@@ -21,7 +17,7 @@ const CART_ITEM_SQL = `
   FROM cart_items ci
   JOIN products p  ON p.id = ci.product_id
   JOIN brands   b  ON b.id = p.brand_id
-  LEFT JOIN pi     ON pi.product_id = p.id
+  LEFT JOIN pi     ON pi.product_id = p.id AND pi.rn = 1
   WHERE ci.user_id = ?
   ORDER BY ci.id ASC
 `;
