@@ -39,8 +39,7 @@ export function CartProvider({ children }) {
       setItems(res.data.items);
       setTotal(res.data.total);
     } catch {
-      setItems([]);
-      setTotal(0);
+      // En cas d'erreur réseau, conserver les items existants (ne pas vider le panier)
     } finally {
       setLoading(false);
     }
@@ -59,10 +58,9 @@ export function CartProvider({ children }) {
       );
       setItems(res.data.items);
       setTotal(res.data.total);
+      localStorage.removeItem(GUEST_CART_KEY); // Supprimer seulement si la fusion a réussi
     } catch {
-      await loadDbCart();
-    } finally {
-      localStorage.removeItem(GUEST_CART_KEY);
+      await loadDbCart(); // Fallback : charger le panier BDD (garde les items existants si erreur)
     }
   }, [loadDbCart]);
 
