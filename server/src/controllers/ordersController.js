@@ -72,13 +72,18 @@ async function createOrder(req, res, next) {
     // Token sécurisé pour les invités (256 bits)
     const guestToken = isGuest ? crypto.randomBytes(32).toString('hex') : null;
 
+    // Fenêtre d'expiration 15 min pour les paiements mobiles en attente
+    const expiresAt = isMobilePay
+      ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      : null;
+
     // ── Transaction ─────────────────────────────────────────────────────────
     let orderId;
     db.exec('BEGIN');
     try {
       const orderResult = db.prepare(`
-        INSERT INTO orders (user_id, status, total_amount, shipping_amount, shipping_address, payment_method, payment_status, guest_email, guest_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO orders (user_id, status, total_amount, shipping_amount, shipping_address, payment_method, payment_status, guest_email, guest_token, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         isGuest ? null : req.user.id,
         orderStatus,
@@ -88,7 +93,8 @@ async function createOrder(req, res, next) {
         payment_method,
         paymentStatus,
         isGuest ? (guest_email ?? null) : null,
-        guestToken
+        guestToken,
+        expiresAt
       );
       orderId = orderResult.lastInsertRowid;
 

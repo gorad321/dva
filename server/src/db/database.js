@@ -317,6 +317,20 @@ function runMigrations() {
     console.log('✅ Migration : colonne guest_token ajoutée à orders');
   }
 
+  // Expiration paiement mobile (15 min), horodatage confirmation, compteur IPN
+  if (!orderCols.some((c) => c.name === 'expires_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN expires_at DATETIME');
+    console.log('✅ Migration : colonne expires_at ajoutée à orders');
+  }
+  if (!orderCols.some((c) => c.name === 'paid_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN paid_at DATETIME');
+    console.log('✅ Migration : colonne paid_at ajoutée à orders');
+  }
+  if (!orderCols.some((c) => c.name === 'webhook_attempts')) {
+    db.exec('ALTER TABLE orders ADD COLUMN webhook_attempts INTEGER DEFAULT 0');
+    console.log('✅ Migration : colonne webhook_attempts ajoutée à orders');
+  }
+
   // Remplacer les URLs picsum.photos (lentes/bloquées) par placehold.co (CDN Cloudflare)
   const picsumImages = db.prepare(
     "SELECT pi.id, p.name FROM product_images pi JOIN products p ON pi.product_id = p.id WHERE pi.url LIKE '%picsum.photos%'"

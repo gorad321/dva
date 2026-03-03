@@ -1,56 +1,84 @@
 /**
- * DVA - Routes Paiement PayTech
- * Source officielle : https://doc.intech.sn/doc_paytech.php
+ * DVA - Routes Paiement PayTech (version sécurisée production-ready)
  *
- * Routes exposées :
- *   POST /api/payments/create-payment      → initier un paiement pour une commande existante
- *   POST /api/payments/webhook/paytech     → IPN PayTech (notification de paiement)
- *   GET  /api/payments/payment-success     → redirection après paiement réussi
- *   GET  /api/payments/payment-cancel      → redirection après annulation du paiement
+ * Sécurité implémentée :
+ *   - Vérification SHA256 des clés API sur chaque webhook
+ *   - Re-vérification PayTech API avant toute confirmation de commande
+ *   - Idempotence : UPDATE WHERE payment_status = 'pending'
+ *   - Comparaison montant payé vs montant commande (tolérance 1 XOF)
+ *   - Expiration 15 min : refuse le paiement si fenêtre dépassée
+ *   - Vérification propriété commande (utilisateur connecté ou invité + token)
+ *   - /payment-success NE CONFIRME JAMAIS — webhook seul fait foi
  */
 const { Router } = require('express');
-const crypto     = require('crypto');
-const { getDb }  = require('../db/database');
-const { createPayTechPayment } = require('../services/paymentService');
+const crypto = require('crypto');
+const { getDb } = require('../db/database');
+const { createPayTechPayment, getPayTechStatus } = require('../services/paymentService');
+const { optionalAuth } = require('../middleware/auth');
 
 const router = Router();
 
 // ─── POST /create-payment ──────────────────────────────────────────────────────
 /**
- * Initie une session de paiement PayTech pour une commande existante.
- * Utilisé si un client souhaite retenter le paiement d'une commande pending.
+ * Initie une nouvelle session PayTech pour une commande pending existante.
+ * Utilisé quand l'utilisateur veut retenter le paiement d'une commande.
  *
- * Body : { order_id }
- * Réponse : { payment_url, token }
+ * Sécurité :
+ *   - Vérifie la propriété (user_id ou guest_token)
+ *   - Refuse si payment_status !== 'pending'
+ *   - Refuse si la fenêtre de 15 min est expirée
  */
-router.post('/create-payment', async (req, res) => {
+router.post('/create-payment', optionalAuth, async (req, res) => {
   try {
-    const { order_id } = req.body;
+    const db = getDb();
+    const { order_id, guest_token } = req.body;
+
     if (!order_id) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'order_id requis' } });
     }
 
-    const db    = getDb();
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(order_id);
-
     if (!order) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Commande introuvable' } });
     }
-    if (order.payment_status === 'paid') {
-      return res.status(400).json({ error: { code: 'ALREADY_PAID', message: 'Commande déjà payée' } });
+
+    // ── Vérifier la propriété de la commande ────────────────────────────────
+    if (req.user) {
+      if (order.user_id !== req.user.id) {
+        return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Accès refusé' } });
+      }
+    } else {
+      // Invité : doit fournir son guest_token
+      if (!guest_token || !order.guest_token || order.guest_token !== guest_token) {
+        return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Accès refusé' } });
+      }
     }
 
-    const apiUrl     = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-    const successUrl = `${apiUrl}/api/payments/payment-success`;
-    const cancelUrl  = `${apiUrl}/api/payments/payment-cancel`;
-    const ipnUrl     = `${apiUrl}/api/payments/webhook/paytech`;
+    // ── Vérifier que le paiement est encore possible ─────────────────────────
+    if (order.payment_status !== 'pending') {
+      return res.status(400).json({
+        error: { code: 'NOT_PENDING', message: `Commande non payable (statut : ${order.payment_status})` },
+      });
+    }
 
+    // ── Vérifier l'expiration (15 min) ───────────────────────────────────────
+    if (order.expires_at && new Date() > new Date(order.expires_at)) {
+      db.prepare(
+        "UPDATE orders SET status = 'cancelled', payment_status = 'failed' WHERE id = ? AND payment_status = 'pending'"
+      ).run(order.id);
+      console.log(`[create-payment] Commande #${order.id} expirée — annulée automatiquement`);
+      return res.status(400).json({
+        error: { code: 'EXPIRED', message: 'Le délai de paiement a expiré. Veuillez passer une nouvelle commande.' },
+      });
+    }
+
+    const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
     const result = await createPayTechPayment({
       amount:     order.total_amount,
       orderId:    order.id,
-      successUrl,
-      cancelUrl,
-      ipnUrl,
+      successUrl: `${apiUrl}/api/payments/payment-success`,
+      cancelUrl:  `${apiUrl}/api/payments/payment-cancel`,
+      ipnUrl:     `${apiUrl}/api/payments/webhook/paytech`,
     });
 
     if (!result) {
@@ -59,30 +87,36 @@ router.post('/create-payment', async (req, res) => {
       });
     }
 
-    // Stocker le token PayTech pour retrouver la commande au retour
     db.prepare('UPDATE orders SET payment_token = ? WHERE id = ?').run(result.token, order.id);
+    console.log(`[create-payment] Session PayTech créée pour commande #${order.id}`);
 
-    res.json({ payment_url: result.paymentUrl, token: result.token });
+    return res.json({ payment_url: result.paymentUrl, token: result.token });
   } catch (err) {
-    console.error('Erreur /create-payment:', err.message);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
+    console.error('[create-payment]', err.message);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
   }
 });
 
-// ─── POST /webhook/paytech ────────────────────────────────────────────────────
+// ─── POST /webhook/paytech ─────────────────────────────────────────────────────
 /**
  * IPN (Instant Payment Notification) PayTech.
- * PayTech envoie cette requête automatiquement après chaque événement de paiement.
+ * Seul ce webhook confirme définitivement une commande.
  *
- * Vérification d'authenticité :
- *   - api_key_sha256    : SHA256(PAYTECH_API_KEY)
- *   - api_secret_sha256 : SHA256(PAYTECH_API_SECRET)
- *
- * Le champ custom_field est encodé en Base64 par PayTech dans l'IPN.
+ * Chaîne de sécurité (dans l'ordre) :
+ *   1. Vérification SHA256(API_KEY) + SHA256(API_SECRET)
+ *   2. Recherche commande : token_payment → ref_command → custom_field
+ *   3. Incrémentation webhook_attempts (audit)
+ *   4. Idempotence : payment_status !== 'pending' → ignoré
+ *   5. Re-vérification auprès de l'API PayTech (getPayTechStatus)
+ *   6. Comparaison montant payé (±1 XOF de tolérance)
+ *   7. UPDATE atomique WHERE payment_status = 'pending' + SET paid_at
  *
  * Toujours répondre 200 pour éviter les retry infinis de PayTech.
  */
-router.post('/webhook/paytech', (req, res) => {
+router.post('/webhook/paytech', async (req, res) => {
+  // Répondre immédiatement 200 pour éviter les timeout PayTech
+  res.status(200).send('OK');
+
   try {
     const db = getDb();
     const {
@@ -95,137 +129,210 @@ router.post('/webhook/paytech', (req, res) => {
       token_payment,
     } = req.body;
 
-    // ── Vérifier l'authenticité via SHA256 des clés ───────────────────────────
     const apiKey    = process.env.PAYTECH_API_KEY;
     const apiSecret = process.env.PAYTECH_API_SECRET;
 
+    // ── 1. Vérification signatures SHA256 ────────────────────────────────────
     if (apiKey && apiSecret) {
-      const expectedKeyHash    = crypto.createHash('sha256').update(apiKey).digest('hex');
-      const expectedSecretHash = crypto.createHash('sha256').update(apiSecret).digest('hex');
+      const expectedKey    = crypto.createHash('sha256').update(apiKey).digest('hex');
+      const expectedSecret = crypto.createHash('sha256').update(apiSecret).digest('hex');
 
-      if (api_key_sha256 !== expectedKeyHash || api_secret_sha256 !== expectedSecretHash) {
-        console.warn('Webhook PayTech : clés SHA256 invalides');
-        return res.status(403).send('Forbidden');
+      if (api_key_sha256 !== expectedKey || api_secret_sha256 !== expectedSecret) {
+        console.warn('[Webhook PayTech] ❌ Signature invalide — requête ignorée');
+        return;
       }
     }
 
-    // ── Récupérer l'ID de commande ────────────────────────────────────────────
-    // 1. custom_field est encodé en Base64 par PayTech → décoder avant JSON.parse
+    console.log(`[Webhook PayTech] Reçu : type_event=${type_event}, ref=${ref_command}`);
+
+    // ── Gérer sale_canceled ──────────────────────────────────────────────────
+    if (type_event === 'sale_canceled') {
+      let cancelId;
+      if (token_payment) {
+        const row = db.prepare('SELECT id FROM orders WHERE payment_token = ?').get(token_payment);
+        if (row) cancelId = row.id;
+      }
+      if (!cancelId && ref_command) {
+        const parts = ref_command.split('-');
+        if (parts[0] === 'DVA' && parts[1]) cancelId = parseInt(parts[1], 10);
+      }
+      if (cancelId) {
+        db.prepare(
+          "UPDATE orders SET status = 'cancelled', payment_status = 'failed' WHERE id = ? AND payment_status = 'pending'"
+        ).run(cancelId);
+        console.log(`[Webhook PayTech] Commande #${cancelId} annulée`);
+      }
+      return;
+    }
+
+    if (type_event !== 'sale_complete') {
+      console.log(`[Webhook PayTech] type_event="${type_event}" ignoré`);
+      return;
+    }
+
+    // ── 2. Retrouver la commande ─────────────────────────────────────────────
     let orderId;
-    if (custom_field) {
-      try {
-        const decoded = Buffer.from(custom_field, 'base64').toString('utf8');
-        const cf      = JSON.parse(decoded);
-        orderId = cf.order_id;
-      } catch (e) {
-        console.warn('Webhook PayTech : erreur décodage custom_field', e.message);
-      }
-    }
 
-    // 2. Fallback : token_payment stocké en BDD
-    if (!orderId && token_payment) {
+    // Priorité 1 : token_payment (le plus fiable, stocké en BDD lors de la création)
+    if (token_payment) {
       const row = db.prepare('SELECT id FROM orders WHERE payment_token = ?').get(token_payment);
       if (row) orderId = row.id;
     }
 
-    // 3. Fallback : extraire depuis ref_command (format : DVA-{orderId}-{timestamp})
+    // Priorité 2 : ref_command (format DVA-{orderId}-{timestamp})
     if (!orderId && ref_command) {
       const parts = ref_command.split('-');
       if (parts[0] === 'DVA' && parts[1]) orderId = parseInt(parts[1], 10);
     }
 
+    // Priorité 3 : custom_field encodé Base64 par PayTech
+    if (!orderId && custom_field) {
+      try {
+        const decoded = Buffer.from(custom_field, 'base64').toString('utf8');
+        orderId = JSON.parse(decoded).order_id;
+      } catch {
+        console.warn('[Webhook PayTech] Erreur décodage custom_field');
+      }
+    }
+
     if (!orderId) {
-      console.warn('Webhook PayTech : order_id introuvable', { ref_command, token_payment });
-      return res.status(200).send('OK');
+      console.warn('[Webhook PayTech] ⚠️  order_id introuvable', { ref_command, token_payment });
+      return;
     }
 
-    // ── Mettre à jour le statut de la commande ────────────────────────────────
-    if (type_event === 'sale_complete') {
-      db.prepare(
-        "UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = ? AND payment_status = 'pending'"
-      ).run(orderId);
-      console.log(`✅ Commande #${orderId} confirmée via IPN PayTech`);
-    } else if (type_event === 'sale_canceled') {
-      db.prepare(
-        "UPDATE orders SET status = 'cancelled', payment_status = 'failed' WHERE id = ? AND payment_status = 'pending'"
-      ).run(orderId);
-      console.log(`❌ Commande #${orderId} annulée via IPN PayTech`);
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    if (!order) {
+      console.warn(`[Webhook PayTech] ⚠️  Commande #${orderId} introuvable en BDD`);
+      return;
+    }
+
+    // ── 3. Audit : incrémenter le compteur de tentatives webhook ────────────
+    db.prepare(
+      'UPDATE orders SET webhook_attempts = COALESCE(webhook_attempts, 0) + 1 WHERE id = ?'
+    ).run(orderId);
+
+    // ── 4. Idempotence : ne pas retraiter ────────────────────────────────────
+    if (order.payment_status !== 'pending') {
+      console.log(`[Webhook PayTech] ℹ️  Commande #${orderId} déjà traitée (${order.payment_status}) — ignoré`);
+      return;
+    }
+
+    // ── 5. Re-vérification obligatoire auprès de l'API PayTech ──────────────
+    // La signature SHA256 est nécessaire mais pas suffisante.
+    // On appelle PayTech pour confirmer que le paiement est bien "completed".
+    if (!token_payment || !apiKey || !apiSecret) {
+      console.warn(`[Webhook PayTech] ❌ Re-vérification impossible pour #${orderId} (token ou clés absents)`);
+      return;
+    }
+
+    let paytechStatus;
+    try {
+      paytechStatus = await getPayTechStatus(token_payment);
+    } catch (verifyErr) {
+      // API PayTech inaccessible — refuser pour éviter toute fraude
+      console.error(`[Webhook PayTech] ❌ API inaccessible pour #${orderId}: ${verifyErr.message}`);
+      return;
+    }
+
+    if (!paytechStatus || paytechStatus.success !== 1) {
+      console.warn(`[Webhook PayTech] ❌ Re-vérification échouée pour #${orderId}`, paytechStatus);
+      return;
+    }
+
+    // ── 6. Comparer le montant payé ──────────────────────────────────────────
+    // Tolérance de 1 XOF pour les éventuels arrondis de PayTech.
+    const paidAmount = parseFloat(paytechStatus.item_price ?? item_price ?? 0);
+    if (paidAmount > 0 && Math.abs(paidAmount - Number(order.total_amount)) > 1) {
+      console.warn(
+        `[Webhook PayTech] ❌ Montant incohérent pour #${orderId}: attendu=${order.total_amount} XOF, reçu=${paidAmount} XOF`
+      );
+      return;
+    }
+
+    // ── 7. Confirmer la commande (UPDATE atomique) ───────────────────────────
+    const update = db.prepare(
+      `UPDATE orders
+         SET status = 'confirmed', payment_status = 'paid', paid_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND payment_status = 'pending'`
+    ).run(orderId);
+
+    if (update.changes > 0) {
+      console.log(`✅ [Webhook PayTech] Commande #${orderId} confirmée — ${order.total_amount} XOF`);
     } else {
-      console.log(`ℹ️  IPN PayTech : type_event=${type_event} pour commande #${orderId}`);
+      console.log(`[Webhook PayTech] Commande #${orderId} non modifiée (mise à jour concurrente ?)`);
     }
 
-    res.status(200).send('OK');
   } catch (err) {
-    console.error('Erreur webhook PayTech:', err);
-    res.status(200).send('OK'); // Toujours 200 pour éviter les retry infinis
+    console.error('[Webhook PayTech] Erreur non gérée:', err.message);
   }
 });
 
 // ─── GET /payment-success ─────────────────────────────────────────────────────
 /**
- * Redirection de PayTech après paiement réussi.
- * PayTech appelle cette URL avec ?token_payment={token} en query string.
- * Ce handler met à jour la commande (au cas où l'IPN n'est pas encore arrivé)
- * puis redirige le client vers la page de confirmation du frontend.
+ * Redirection PayTech après paiement réussi.
+ *
+ * ⚠️  Ce handler NE CONFIRME JAMAIS la commande.
+ * La confirmation dépend UNIQUEMENT du webhook IPN (/webhook/paytech).
+ *
+ * Il redirige le client vers la page de confirmation frontend qui poll
+ * le statut de la commande toutes les 5 secondes jusqu'à confirmation.
+ * Le guest_token est transmis pour les invités.
  */
 router.get('/payment-success', (req, res) => {
   const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
   try {
-    const db           = getDb();
+    const db = getDb();
     const tokenPayment = req.query.token_payment || req.query.token;
 
     if (!tokenPayment) {
-      return res.redirect(`${clientOrigin}/mon-compte?payment=success`);
+      return res.redirect(`${clientOrigin}/?payment=success`);
     }
 
-    const order = db.prepare('SELECT id, status, payment_status FROM orders WHERE payment_token = ?').get(tokenPayment);
-
+    const order = db.prepare('SELECT id, guest_token FROM orders WHERE payment_token = ?').get(tokenPayment);
     if (!order) {
-      return res.redirect(`${clientOrigin}/mon-compte?payment=success`);
+      return res.redirect(`${clientOrigin}/?payment=success`);
     }
 
-    // Confirmer la commande si l'IPN n'est pas encore arrivé
-    if (order.payment_status === 'pending') {
-      db.prepare(
-        "UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = ? AND payment_status = 'pending'"
-      ).run(order.id);
-      console.log(`✅ Commande #${order.id} confirmée via payment-success redirect`);
-    }
+    // Inclure le guest_token pour que les invités accèdent à leur commande
+    const guestParam = order.guest_token ? `&token=${order.guest_token}` : '';
 
-    res.redirect(`${clientOrigin}/commande/confirmation/${order.id}?payment=success`);
+    // ?payment=pending : le frontend poll jusqu'à confirmation par webhook
+    console.log(`[payment-success] Redirection vers confirmation commande #${order.id}`);
+    return res.redirect(`${clientOrigin}/commande/confirmation/${order.id}?payment=pending${guestParam}`);
   } catch (err) {
-    console.error('Erreur payment-success:', err);
-    res.redirect(`${clientOrigin}/mon-compte`);
+    console.error('[payment-success]', err.message);
+    return res.redirect(`${clientOrigin}/`);
   }
 });
 
 // ─── GET /payment-cancel ──────────────────────────────────────────────────────
 /**
- * Redirection de PayTech après annulation du paiement.
- * PayTech appelle cette URL avec ?token_payment={token} en query string.
- * Ce handler annule la commande et redirige le client vers le panier.
+ * Redirection PayTech après annulation.
+ * Annule la commande et redirige vers la page de confirmation (état annulé).
  */
 router.get('/payment-cancel', (req, res) => {
   const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
   try {
-    const db           = getDb();
+    const db = getDb();
     const tokenPayment = req.query.token_payment || req.query.token;
 
     if (tokenPayment) {
-      const order = db.prepare('SELECT id FROM orders WHERE payment_token = ?').get(tokenPayment);
+      const order = db.prepare('SELECT id, guest_token FROM orders WHERE payment_token = ?').get(tokenPayment);
       if (order) {
         db.prepare(
           "UPDATE orders SET status = 'cancelled', payment_status = 'failed' WHERE id = ? AND payment_status = 'pending'"
         ).run(order.id);
-        console.log(`❌ Commande #${order.id} annulée via payment-cancel redirect`);
-        return res.redirect(`${clientOrigin}/commande/confirmation/${order.id}?payment=cancelled`);
+        console.log(`[payment-cancel] Commande #${order.id} annulée`);
+
+        const guestParam = order.guest_token ? `&token=${order.guest_token}` : '';
+        return res.redirect(`${clientOrigin}/commande/confirmation/${order.id}?payment=cancelled${guestParam}`);
       }
     }
 
-    res.redirect(`${clientOrigin}/panier?payment=cancelled`);
+    return res.redirect(`${clientOrigin}/panier?payment=cancelled`);
   } catch (err) {
-    console.error('Erreur payment-cancel:', err);
-    res.redirect(`${clientOrigin}/panier`);
+    console.error('[payment-cancel]', err.message);
+    return res.redirect(`${clientOrigin}/panier`);
   }
 });
 

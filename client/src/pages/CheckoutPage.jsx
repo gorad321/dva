@@ -295,13 +295,23 @@ function CheckoutForm() {
     setStep(1);
   };
 
+  // Validation numéros sénégalais : mobile 7X XXX XX XX ou fixe 33 XXX XX XX
+  const isValidSenegalPhone = (phone) => {
+    const cleaned = phone.replace(/[\s\-\.]/g, '');
+    return /^(\+221|00221|221)?(7[0-8]|33)\d{7}$/.test(cleaned);
+  };
+
   const validateStep1 = () => {
     const errs = {};
     if (!address.first_name.trim()) errs.first_name = 'Prénom requis';
     if (!address.last_name.trim()) errs.last_name = 'Nom requis';
     if (!address.address1.trim()) errs.address1 = 'Adresse requise';
     if (!address.city.trim()) errs.city = 'Ville requise';
-    if (!address.phone.trim()) errs.phone = 'Téléphone requis pour la livraison';
+    if (!address.phone.trim()) {
+      errs.phone = 'Téléphone requis pour la livraison';
+    } else if (!isValidSenegalPhone(address.phone)) {
+      errs.phone = 'Numéro invalide — ex : +221 77 000 00 00 ou 77 000 00 00';
+    }
     if (isGuest && guestEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
       errs.guest_email = 'Email invalide';
     }
@@ -328,9 +338,9 @@ function CheckoutForm() {
 
       const res = await ordersApi.createOrder(payload);
       const { order, payment_url, guest_token } = res.data;
-      await clearCart();
 
       if (payment_url) {
+        // Paiement mobile : NE PAS vider le panier avant que l'utilisateur paie
         setMobilePayment({
           orderId: order.id,
           paymentUrl: payment_url,
@@ -340,6 +350,8 @@ function CheckoutForm() {
         });
         setStep(3);
       } else {
+        // Commande confirmée directement (carte simulée, livraison, ou PayTech indispo)
+        await clearCart();
         const confirmPath = `/commande/confirmation/${order.id}${guest_token ? `?token=${guest_token}` : ''}`;
         if (paymentMethod === 'wave' || paymentMethod === 'orange_money') {
           toast.error('Le service de paiement mobile est temporairement indisponible. Votre commande est enregistrée — vous serez contacté pour le paiement.');
@@ -539,7 +551,9 @@ function CheckoutForm() {
               method={mobilePayment.method}
               amount={mobilePayment.amount}
               guestToken={mobilePayment.guestToken}
-              onConfirm={() => {
+              onConfirm={async () => {
+                // Vider le panier seulement quand l'utilisateur confirme avoir payé
+                await clearCart();
                 const confirmPath = `/commande/confirmation/${mobilePayment.orderId}?payment=pending${mobilePayment.guestToken ? `&token=${mobilePayment.guestToken}` : ''}`;
                 navigate(confirmPath);
               }}
